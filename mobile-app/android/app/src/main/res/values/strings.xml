@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">灵犀校园</string>
+    <string name="title_activity_main">灵犀校园</string>
+    <string name="package_name">com.lingxi.campus</string>
+    <string name="custom_url_scheme">com.lingxi.campus</string>
+</resources>

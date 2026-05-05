@@ -1,0 +1,12 @@
+{
+  "appId": "com.lingxi.campus",
+  "appName": "灵犀校园",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#13131f"
+  },
+  "server": {
+    "androidScheme": "http"
+  }
+}
