@@ -31,6 +31,10 @@ jobs:
         working-directory: mobile-app
         run: npx cap copy android
 
+      - name: Sync Android plugins
+        working-directory: mobile-app
+        run: npx cap sync android
+
       - name: Build Android APK
         working-directory: mobile-app/android
         run: chmod +x gradlew && ./gradlew assembleDebug
