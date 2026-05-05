@@ -18,7 +18,7 @@
     "files": [
       "main.js",
       "preload.js",
-      "../frontend/**/*"
+      "frontend/**/*"
     ],
     "win": {
       "target": ["nsis"],

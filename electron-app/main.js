@@ -3,9 +3,9 @@ const path = require('path');
 const http = require('http');
 const fs = require('fs');
 
-// 打包后 frontend 在 asar 根目录，开发时在 ../frontend
+// 打包后 frontend 在 asar 内的 frontend/ 目录，开发时在 ../frontend
 const FRONTEND_DIR = app.isPackaged
-  ? path.join(__dirname)
+  ? path.join(__dirname, 'frontend')
   : path.join(__dirname, '..', 'frontend');
 const MIME = {
   '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript',
