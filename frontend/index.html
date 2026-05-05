@@ -929,6 +929,8 @@ html {
   animation: pulse 2s infinite;
 }
 
+
+
 .grumpy-badge svg {
   width: 10px;
   height: 10px;
@@ -1887,6 +1889,52 @@ html {
 }
 </style>
 
+<!-- 拍照模态框样式 -->
+<style>
+.camera-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.camera-modal video {
+  width: 100%;
+  max-height: 80vh;
+  object-fit: cover;
+}
+.camera-controls {
+  display: flex;
+  gap: 40px;
+  padding: 20px;
+  align-items: center;
+}
+.camera-shutter {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  background: rgba(255,255,255,0.3);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.camera-shutter:active {
+  background: rgba(255,100,100,0.6);
+}
+.camera-cancel {
+  padding: 10px 24px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: transparent;
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+</style>
+
 <!-- ============================
      6. Chat Components
      ============================ -->
@@ -2378,6 +2426,22 @@ html {
   flex-shrink: 0;
 }
 .image-btn:hover { background: var(--accent-muted); color: var(--accent); border-color: var(--accent); }
+
+.camera-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
 
 .image-preview-bar {
   display: flex;
@@ -3072,6 +3136,13 @@ html {
           </svg>
         </button>
         <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="handleImageSelect(event)">
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" onchange="handleImageSelect(event)">
+        <button class="camera-btn" id="cameraBtn" onclick="takePhoto()" title="拍照">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+        </button>
         <button class="voice-btn" id="voiceBtn" onclick="toggleVoiceChat()" title="语音输入">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -3608,12 +3679,10 @@ function toggleSidebar() {
 // 8. CONNECTION STATUS
 // ============================================================
 function updateConnectionStatus(status, text) {
-  console.log('[updateConnectionStatus] called:', status, text);
   state.connectionStatus = status;
   const statusEl = document.getElementById('connectionStatus');
   const textEl = document.getElementById('connectionText');
   const dot = statusEl ? statusEl.querySelector('.dot') : null;
-  console.log('[updateConnectionStatus] elements:', statusEl, textEl, dot);
 
   if (dot) {
     dot.className = 'dot';
@@ -3850,7 +3919,7 @@ function saveHistory() {
   try {
     const msgs = state.chatHistory.slice(-MAX_HISTORY);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(msgs));
-  } catch (e) { console.error('[loadData] error:', e); }
+  } catch (e) { /* ignore */ }
 }
 
 async function loadHistory() {
@@ -3866,7 +3935,7 @@ async function loadHistory() {
       }
     }
   } catch (e) {
-    console.log('[loadHistory] server load failed, fallback to localStorage');
+    // 服务器加载失败，fallback 到 localStorage
   }
   // 服务器没数据则 fallback 到 localStorage
   if (state.chatHistory.length === 0) {
@@ -3982,7 +4051,6 @@ function updateActiveAgent(agent) {
 let _streamState = null; // { msgEl, text, agent }
 
 function streamAdd(agent) {
-  console.log('[streamAdd] called with agent:', agent);
   const msg = document.createElement('div');
   msg.className = 'message bot message-enter-bot';
   msg.id = 'streamMsg';
@@ -3996,7 +4064,6 @@ function streamAdd(agent) {
 }
 
 function streamAppend(chunk) {
-  console.log('[streamAppend] called, _streamState:', _streamState, 'chunk:', chunk);
   if (!_streamState) return;
   const target = _streamState.msgEl.querySelector('#streamTarget');
   if (!target) return;
@@ -4040,11 +4107,10 @@ function streamDone(emotion, lingxiStatus) {
 
 // SSE 流式发送
 async function sendMessage() {
-  console.log('[sendMessage] called, isLoading:', state.isLoading);
   const text = dom.messageInput.value.trim();
   const hasImage = !!state.pendingImage;
-  if (!text && !hasImage) { console.log('[sendMessage] early return'); return; }
-  if (state.isLoading) { console.log('[sendMessage] early return'); return; }
+  if (!text && !hasImage) return;
+  if (state.isLoading) return;
 
   const messageText = text || "请分析这张图片";
 
@@ -4072,7 +4138,6 @@ async function sendMessage() {
   addLoading();
 
   try {
-    console.log('[sendMessage] sending fetch to', `${API_BASE}/chat/stream`);
     const res = await fetch(`${API_BASE}/chat/stream`, {
       method: 'POST',
       headers: {
@@ -4082,7 +4147,6 @@ async function sendMessage() {
       body: JSON.stringify(body),
     });
 
-    console.log('[sendMessage] fetch ok, status:', res.status, 'ok:', res.ok);
     if (!res.ok) throw new Error('Non-200');
 
     const reader = res.body.getReader();
@@ -4096,7 +4160,6 @@ async function sendMessage() {
       const resetTimeout = () => {
         clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {
-          console.error('[sendMessage] stream timeout - forcing done');
           isDone = true;
           removeLoading();
         }, 180000);
@@ -4119,9 +4182,7 @@ async function sendMessage() {
 
           try {
             const data = JSON.parse(line.slice(6));
-            console.log('[sendMessage] SSE event:', data.type, data.type === 'chunk' ? data.content : '');
             if (data.type === 'meta') {
-              console.log('[sendMessage] meta event, data.agent:', data.agent, 'currentAgent before:', currentAgent);
               currentAgent = data.agent || 'secretary';
               updateActiveAgent(currentAgent);
               state.currentAgent = currentAgent;
@@ -4139,7 +4200,7 @@ async function sendMessage() {
               renderSuggestions(data.emotion);
             }
           } catch (e) {
-            console.error('[sendMessage] parse error:', e);
+            // JSON 解析错误，忽略
           }
         }
         resetTimeout();
@@ -4168,7 +4229,7 @@ function renderMarkdown(text) {
       return typeof marked.parse === 'function' ? marked.parse(text) : marked(text);
     }
   } catch (e) {
-    console.warn('Markdown parse error:', e);
+    // Markdown 解析错误，使用 fallback
   }
   // fallback: 转义并换行
   return escapeHtml(text).replace(/\n/g, '<br>');
@@ -4286,12 +4347,19 @@ async function toggleVoiceChat() {
   if (!state.voiceRecording) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      state.mediaRecorder = new MediaRecorder(stream);
+      // 优先 webm/opus，降级到 mp4 或 ogg，兼容 Android WebView
+      const mimeType =
+        MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+        MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
+        MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' :
+        MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : '';
+      state.mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       state.audioChunks = [];
 
       state.mediaRecorder.ondataavailable = e => state.audioChunks.push(e.data);
       state.mediaRecorder.onstop = async () => {
-        const blob = new Blob(state.audioChunks, { type: 'audio/webm' });
+        const actualType = mimeType.split(';')[0] || 'audio/webm';
+        const blob = new Blob(state.audioChunks, { type: actualType });
         stream.getTracks().forEach(t => t.stop());
         await playTTS(blob);
       };
@@ -4354,7 +4422,6 @@ async function playTTS(audioBlob) {
       showToast('语音识别失败：' + (data.error || '未识别到内容'), 'error');
     }
   } catch (e) {
-    console.error('[voice] transcribe error:', e);
     showToast('语音识别请求失败', 'error');
   }
 }
@@ -4371,7 +4438,7 @@ async function loadAllData() {
       loadMoodCalendar(),
     ]);
   } catch(e) {
-    console.error('[loadAllData] error:', e);
+    // 加载失败，忽略
   }
 }
 
@@ -4388,7 +4455,6 @@ async function checkProactiveMessage() {
 }
 
 async function loadOverviewData() {
-  console.log('[loadOverviewData] start');
   // Today's date
   const today = new Date();
   const monthDay = `${today.getMonth()+1}月${today.getDate()}日`;
@@ -4761,5 +4827,80 @@ async function submitFeedback() {
         <div id="feedbackResult" style="display:none;margin-top:10px;text-align:center;font-size:13px;"></div>
       </div>
     </div>
+<!-- 拍照模态框 -->
+<div class="camera-modal" id="cameraModal" style="display:none">
+  <video id="cameraVideo" autoplay playsinline></video>
+  <canvas id="cameraCanvas" style="display:none"></canvas>
+  <div class="camera-controls">
+    <button class="camera-cancel" onclick="closeCamera()">取消</button>
+    <button class="camera-shutter" onclick="capturePhoto()">拍照</button>
+  </div>
+</div>
+
+<script>
+// 拍照功能 - 使用 getUserMedia
+async function takePhoto() {
+  // Capacitor 环境用原生 Camera
+  if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Camera) {
+    try {
+      const photo = await window.Capacitor.Plugins.Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: 'dataUrl',
+        source: 'CAMERA',
+        width: 1024,
+      });
+      if (photo.dataUrl) {
+        state.pendingImage = photo.dataUrl;
+        _showImagePreview(photo.dataUrl);
+        showToast('已拍照', 'info');
+      }
+    } catch (e) {
+      if (e.message && !e.message.includes('cancelled')) {
+        showToast('拍照失败: ' + e.message, 'error');
+      }
+    }
+    return;
+  }
+  // 浏览器环境用 getUserMedia
+  const modal = document.getElementById('cameraModal');
+  const video = document.getElementById('cameraVideo');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    video.srcObject = stream;
+    state._cameraStream = stream;
+    modal.style.display = 'flex';
+  } catch (e) {
+    showToast('无法访问摄像头: ' + e.message, 'error');
+  }
+}
+
+function capturePhoto() {
+  const video = document.getElementById('cameraVideo');
+  const canvas = document.getElementById('cameraCanvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  state.pendingImage = dataUrl;
+  _showImagePreview(dataUrl);
+  closeCamera();
+  showToast('已拍照', 'info');
+}
+
+function closeCamera() {
+  const modal = document.getElementById('cameraModal');
+  const video = document.getElementById('cameraVideo');
+  if (state._cameraStream) {
+    state._cameraStream.getTracks().forEach(t => t.stop());
+    state._cameraStream = null;
+  }
+  video.srcObject = null;
+  modal.style.display = 'none';
+}
+</script>
+
 </body>
 </html>

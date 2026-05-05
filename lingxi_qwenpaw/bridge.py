@@ -7,6 +7,10 @@ from agentscope.agent import ReActAgent
 from agentscope.tool import Toolkit, ToolResponse
 from agentscope.message import Msg, TextBlock
 
+from lingxi_qwenpaw.logger import get_logger
+
+logger = get_logger(__name__)
+
 from lingxi_qwenpaw.config import LLM_API_URL, LLM_API_KEY, LLM_MODEL, EMBEDDING_API_KEY
 from lingxi_qwenpaw.tools import TOOL_FUNCTIONS
 
@@ -181,9 +185,9 @@ def _load_chat_history(agent: ReActAgent, working_dir: str) -> None:
                 continue
 
         if loaded > 0:
-            print(f"[_load_chat_history] 从 {len(jsonl_files)} 个文件加载了 {loaded} 条历史记录")
+            logger.info(f"从 {len(jsonl_files)} 个文件加载了 {loaded} 条历史记录")
     except Exception as e:
-        print(f"[_load_chat_history] 失败: {e}")
+        logger.error(f"加载聊天历史失败: {e}", exc_info=True)
 
 
 def _setup_provider() -> None:
@@ -318,10 +322,10 @@ def add_assistant_message_to_memory(content: str, user_id: str = "default") -> N
             with open(fp, "a", encoding="utf-8") as f:
                 f.write(json.dumps(msg.to_dict(), ensure_ascii=False) + "\n")
         except Exception as e:
-            print(f"[add_assistant_message_to_memory] 持久化失败: {e}")
+            logger.error(f"持久化消息失败: {e}", exc_info=True)
 
     except Exception as e:
-        print(f"[add_assistant_message_to_memory] 失败: {e}")
+        logger.error(f"添加助手消息到记忆失败: {e}", exc_info=True)
 
 
 async def agent_chat(user_message: str, user_id: str = "default") -> str:
@@ -371,7 +375,7 @@ def llm_call_async(prompt: str, temperature: float = 0.8) -> str:
             data = response.json()
             return data["choices"][0]["message"]["content"]
     except Exception as e:
-        print(f"[llm_call_async] LLM 调用失败: {e} | URL={LLM_API_URL}/chat/completions | model={LLM_MODEL}")
+        logger.error(f"LLM 调用失败: {e} | URL={LLM_API_URL}/chat/completions | model={LLM_MODEL}", exc_info=True)
         return ""
 
 
@@ -381,9 +385,10 @@ def llm_call(prompt: str, temperature: float = 0.8) -> str:
 
 
 # ─── SiliconFlow 轻量模型（用于摘要等不需要强模型的场景）──────────────
-SF_LLM_URL = "https://api.siliconflow.cn/v1/chat/completions"
-SF_API_KEY = "sk-bkamiuygydnklotgniygaamxbnoostamrghxnjyvqwwfjhoo"
-SF_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+import os
+SF_LLM_URL = os.environ.get("SF_LLM_URL", "https://api.siliconflow.cn/v1/chat/completions")
+SF_API_KEY = os.environ.get("SF_API_KEY", os.environ.get("EMBEDDING_API_KEY", ""))
+SF_MODEL = os.environ.get("SF_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 
 
 def llm_call_sf(prompt: str, temperature: float = 0.7) -> str:
@@ -409,5 +414,5 @@ def llm_call_sf(prompt: str, temperature: float = 0.7) -> str:
             data = response.json()
             return data["choices"][0]["message"]["content"]
     except Exception as e:
-        print(f"[llm_call_sf] SiliconFlow LLM 调用失败: {e}")
+        logger.error(f"SiliconFlow LLM 调用失败: {e}", exc_info=True)
         return ""

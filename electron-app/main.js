@@ -1,7 +1,16 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, session } = require('electron');
 const path = require('path');
 
 function createWindow() {
+  // 自动批准麦克风权限，消除系统确认弹窗
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') {
+      callback(true);
+    } else {
+      callback(false);
+    }
+  });
+
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -14,6 +23,17 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  // 白屏诊断：错误监听
+  win.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('[Electron] Page load failed:', errorCode, errorDescription);
+  });
+  win.webContents.on('console-message', (event, level, message) => {
+    if (level >= 2) console.error('[Electron] Renderer error:', message);
+  });
+  win.webContents.on('crashed', () => {
+    console.error('[Electron] Renderer process crashed');
   });
 
   win.loadFile(path.join(__dirname, '..', 'frontend', 'index.html'));

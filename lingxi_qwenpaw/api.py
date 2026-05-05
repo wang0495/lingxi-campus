@@ -3,14 +3,16 @@ import asyncio
 import base64
 import json
 import re
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from typing import Optional, Any
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Header, Body
+from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Header, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from lingxi_qwenpaw.bridge import (
@@ -20,7 +22,21 @@ from lingxi_qwenpaw.bridge import (
     get_memory_manager
 )
 from lingxi_qwenpaw.agent import call_tool
-from lingxi_qwenpaw.auth import verify_token, register as auth_register, login as auth_login
+from lingxi_qwenpaw.auth import verify_token, register as auth_register, login as auth_login, refresh_access_token
+from lingxi_qwenpaw.exceptions import LingxiError, DatabaseError, APIError, ValidationError, AuthenticationError, RateLimitError
+from lingxi_qwenpaw.logger import get_logger
+from lingxi_qwenpaw.middleware import RateLimitMiddleware
+from lingxi_qwenpaw.middleware import RequestIDMiddleware, RequestIdFilter
+from lingxi_qwenpaw.schemas import (
+    ApiResponse, ErrorResponse, PaginatedResponse,
+    success_response, error_response, paginated_response
+)
+
+# 获取日志记录器
+logger = get_logger(__name__)
+
+# ─── 服务启动时间记录 ────────────────────────────────────────────────
+_SERVICE_START_TIME = time.time()
 
 
 # ─── 认证 ──────────────────────────────────────────────────────────
@@ -47,13 +63,87 @@ def require_user(user_id: Optional[str] = Depends(get_current_user)) -> str:
 # ─── 初始化 ────────────────────────────────────────────────────────
 
 app = FastAPI(title="灵犀·校园 API", version="1.0")
+
+# CORS 配置（从环境变量读取允许的域名）
+import os
+_allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:8000,http://127.0.0.1:8003,http://localhost:8003")
+ALLOWED_ORIGINS = [origin.strip() for origin in _allowed_origins.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
+
+# 添加请求 ID 中间件
+app.add_middleware(RequestIDMiddleware)
+
+
+# ─── 全局异常处理器 ────────────────────────────────────────────────
+
+@app.exception_handler(LingxiError)
+async def lingxi_error_handler(request: Request, exc: LingxiError):
+    """
+    捕获所有 LingxiError 异常，返回统一格式的错误响应
+    
+    使用 ErrorResponse 模型确保响应格式一致：
+    {
+        "success": false,
+        "error_code": "ERROR_CODE",
+        "message": "错误消息",
+        "details": {...}  // 可选
+    }
+    """
+    logger.error(f"业务异常: {exc.error_code} - {exc.message}", exc_info=True)
+    
+    # 根据异常类型设置 HTTP 状态码
+    if isinstance(exc, AuthenticationError):
+        status_code = 401
+    elif isinstance(exc, ValidationError):
+        status_code = 400
+    elif isinstance(exc, RateLimitError):
+        status_code = 429
+    else:
+        status_code = 500
+    
+    # 使用 ErrorResponse 模型构建响应
+    error_data = ErrorResponse(
+        error_code=exc.error_code,
+        message=exc.message,
+        details=exc.details if exc.details else None
+    )
+    
+    response_content = error_data.model_dump(exclude_none=True)
+    
+    # 对于速率限制错误，添加 retry_after
+    if isinstance(exc, RateLimitError) and exc.retry_after is not None:
+        response_content["retry_after"] = exc.retry_after
+    
+    return JSONResponse(
+        status_code=status_code,
+        content=response_content,
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """
+    捕获所有未处理的异常，返回统一格式的错误响应
+    """
+    logger.error(f"未处理的异常: {type(exc).__name__}: {exc}", exc_info=True)
+    
+    # 使用 ErrorResponse 模型构建响应
+    error_data = ErrorResponse(
+        error_code="INTERNAL_ERROR",
+        message="服务器内部错误",
+    )
+    
+    return JSONResponse(
+        status_code=500,
+        content=error_data.model_dump(),
+    )
 
 
 @app.on_event("startup")
@@ -72,6 +162,25 @@ async def shutdown():
 
 
 # ─── 请求/响应模型 ────────────────────────────────────────────────
+
+# ─── 认证请求模型 ────────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    """登录请求模型"""
+    username: str
+    password: str
+
+
+class RegisterRequest(BaseModel):
+    """注册请求模型"""
+    username: str
+    password: str
+
+
+class RefreshTokenRequest(BaseModel):
+    """刷新令牌请求模型"""
+    refresh_token: str
+
 
 class ChatRequest(BaseModel):
     message: str
@@ -92,25 +201,98 @@ class ChatResponse(BaseModel):
 # ─── 认证端点 ─────────────────────────────────────────────────────
 
 @app.post("/auth/register")
-async def register(username: str, password: str):
-    result = auth_register(username, password)
+async def register(req: RegisterRequest):
+    """
+    用户注册接口
+
+    请求体：
+    - username: 用户名（2-30个字符）
+    - password: 密码（至少8个字符，需包含字母和数字）
+
+    返回格式：
+    {
+        "success": true,
+        "message": "注册成功"
+    }
+    """
+    result = auth_register(req.username, req.password)
     if not result["ok"]:
-        raise HTTPException(status_code=400, detail=result["error"])
-    return {"ok": True}
+        raise ValidationError(
+            message=result["error"],
+            error_code="REGISTRATION_FAILED"
+        )
+    return success_response(message="注册成功")
 
 
 @app.post("/auth/login")
-async def login(username: str, password: str):
-    result = auth_login(username, password)
+async def login(req: LoginRequest):
+    """
+    用户登录接口
+
+    请求体：
+    - username: 用户名
+    - password: 密码
+
+    返回格式：
+    {
+        "success": true,
+        "data": {
+            "token": "访问令牌",
+            "refresh_token": "刷新令牌"
+        },
+        "message": "登录成功"
+    }
+    """
+    result = auth_login(req.username, req.password)
     if not result["ok"]:
-        raise HTTPException(status_code=401, detail=result["error"])
-    return {"ok": True, "token": result["token"], "username": username}
+        raise AuthenticationError(
+            message=result["error"],
+            error_code="LOGIN_FAILED"
+        )
+    return success_response(
+        data={
+            "token": result["token"],
+            "refresh_token": result["refresh_token"]
+        },
+        message="登录成功"
+    )
 
 
 @app.get("/auth/verify")
 async def verify(user_id: str = Depends(require_user)):
     """验证 token 是否有效"""
     return {"ok": True, "username": user_id}
+
+
+@app.post("/auth/refresh")
+async def refresh_token(req: RefreshTokenRequest):
+    """
+    刷新访问令牌接口
+
+    使用刷新令牌获取新的访问令牌。
+
+    请求体：
+    - refresh_token: 刷新令牌（登录时获取）
+
+    返回格式：
+    {
+        "success": true,
+        "data": {
+            "token": "新的访问令牌"
+        },
+        "message": "令牌刷新成功"
+    }
+    """
+    result = refresh_access_token(req.refresh_token)
+    if not result["ok"]:
+        raise AuthenticationError(
+            message=result["error"],
+            error_code="REFRESH_FAILED"
+        )
+    return success_response(
+        data={"token": result["token"]},
+        message="令牌刷新成功"
+    )
 
 
 @app.post("/init")
@@ -138,10 +320,14 @@ def _get_system_prompt() -> str:
 async def _react_loop(user_message: str, user_id: str) -> str:
     """基于 qwenpaw ReActAgent 的对话"""
     from lingxi_qwenpaw.bridge import get_emotion_engine, get_life_engine
+    import random
     # 动态上下文
     try:
         life_engine = get_life_engine(user_id)
         emotion_engine = get_emotion_engine(user_id)
+        # 检查傲娇/害羞超时自动解除（每轮对话前检查）
+        emotion_engine.check_grumpy_resolve()
+        emotion_engine.check_shy_resolve()
         behavior = life_engine.get_behavior_prompt()
         emotion_state = emotion_engine.get_state()
         from datetime import datetime as _dt
@@ -162,6 +348,15 @@ async def _react_loop(user_message: str, user_id: str) -> str:
             context += f"\n[注意] 灵犀在闹脾气：{emotion_state['grumpy_reason']}"
     except Exception:
         context = ""
+
+    # 每次打招呼用不同方式，防止重复开场白
+    greetings = [
+        "用轻松自然的方式打招呼，像朋友一样，不要重复之前说过的话",
+        "今天换个方式开场吧，说点不一样的",
+        "自然一点，随便聊，不用刻意打招呼",
+        "刚见面，随意一点开始对话就好",
+    ]
+    context += f"\n[提示] {random.choice(greetings)}"
 
     sys_prompt = _get_system_prompt() + context
     update_agent_sys_prompt(sys_prompt, user_id)
@@ -186,11 +381,264 @@ async def _react_loop(user_message: str, user_id: str) -> str:
 
 # ─── 自动互动检测 ──────────────────────────────────────────────────
 
-_PRAISE_WORDS = {"棒", "厉害", "真好", "太强", "牛", "优秀", "不错", "666", "强", "赞", "漂亮", "完美", "感谢", "谢谢", "爱你", "好棒", "太厉害了", "爱了"}
-_APOLOGY_WORDS = {"对不起", "抱歉", "不好意思", "我错了", "sorry", "原谅", "赔罪", "对不起啦", "不好意思哈"}
-_IGNORE_WORDS = {"笨", "傻", "滚", "烦", "讨厌", "没用", "弱智", "有病", "你烦", "不理", "滚开", "闭嘴", "神经病", "无聊", "弱", "太差", "垃圾"}
-_SHY_WORDS = {"喜欢你", "想你", "担心你", "你在干嘛", "你住哪", "你多大", "有对象吗", "想抱你", "想亲你", "好可爱", "好乖"}
+_PRAISE_WORDS = {
+    # 直接夸
+    "棒", "厉害", "真好", "太强", "牛", "优秀", "不错", "666", "强", "赞", "漂亮", "完美",
+    "好棒", "太厉害了", "爱了", "绝了", "可以啊", "行啊", "有你的", "可以可以",
+    "真棒", "真厉害", "真牛", "真强", "真优秀", "真好看", "真美", "真帅",
+    "太棒了", "太强了", "太牛了", "太厉害了", "太优秀了", "太好了", "太赞了", "太绝了",
+    "好厉害", "好棒啊", "好强", "好牛", "好优秀", "好赞", "好可爱", "好乖",
+    # 感谢
+    "感谢", "谢谢", "多谢", "谢了", "感恩", "太感谢了", "太谢谢了", "谢啦",
+    "辛苦了", "麻烦你了", "费心了", "难为你了", "麻烦啦", "感谢你", "谢谢你",
+    # 爱意
+    "爱你", "爱你哦", "超爱你", "最爱你", "我最爱你了", "么么哒", "么么", "亲一个",
+    "喜欢你", "好喜欢你", "超喜欢你", "最喜欢你了", "爱死你了",
+    # 肯定/认可
+    "真棒", "做得好", "干得漂亮", "漂亮", "好样的", "了不起", "太有才了", "太有才",
+    "你真棒", "你真厉害", "你真牛", "你真强", "你最好了", "你最棒", "你最强",
+    "你是我的神", "你是我见过最棒的", "服了", "佩服", "五体投地",
+    "好聪明", "太聪明了", "真聪明", "小天才", "聪明绝顶",
+    "太暖了", "好暖", "暖男", "暖心", "贴心", "细心", "温柔",
+    "太贴心了", "好贴心", "真贴心", "心都化了",
+    # 表情/网络用语
+    "哈哈哈", "哈哈哈哈", "笑死", "笑死我了", "笑cry", "笑拉了", "笑不活了",
+    "绝绝子", "yyds", "yyds!", "泰裤辣", "太酷了", "酷毙了",
+    "好家伙", "我的天", "天呐", "哇塞", "我去", "卧槽", "nb", "nb!",
+    # 鼓励/支持
+    "加油", "你可以的", "你能行", "相信你", "支持你", "挺你", "看好你",
+    "没问题", "肯定行", "一定行", "稳了", "冲", "搞起", "走起",
+    "棒棒哒", "美滋滋", "开心", "好开心", "太开心了", "好幸福", "太幸福了",
+    "感恩有你", "遇见你真好", "有你真好", "你是最好的", "你是最棒的",
+    "为你骄傲", "以你为荣", "太为你高兴了", "真为你开心",
+    "有你在真好", "多亏了你", "全靠你了", "幸好有你",
+    "太贴心了", "你太暖了", "你真的很好", "你真的很棒",
+    "给力", "太给力了", "真的给力", "超给力", "满分", "太完美了",
+    "服气", "真的服了", "不得不服", "心服口服",
+    "好样的", "干得好", "干得不错", "做得漂亮", "干得漂亮",
+    "不错嘛", "可以的", "真不赖", "挺好的", "蛮好的", "相当不错",
+    "太有才了", "你太有才了", "才华横溢", "文武双全",
+    "好贴心啊", "太暖了", "温暖", "治愈", "治愈系",
+    "好萌", "萌死了", "萌萌哒", "呆萌", "可爱死了", "可爱到爆",
+    "好甜", "太甜了", "甜死了", "齁甜", "甜到我了",
+    "好酷", "太酷了", "超酷", "酷毙了", "帅呆了", "帅死了",
+    "好有趣", "太有趣了", "真有趣", "有意思", "挺有意思的",
+    "好感动", "太感动了", "感动哭了", "泪目", "破防了",
+    "好用心", "太用心了", "真用心", "细节", "太细节了",
+}
+_APOLOGY_WORDS = {
+    # 直接道歉
+    "对不起", "抱歉", "不好意思", "我错了", "sorry", "赔罪", "对不起啦", "不好意思哈",
+    "我真错了", "是我不好", "我的错", "都是我的错", "是我不好别生气",
+    "道歉", "向你道歉", "真心道歉", "诚恳道歉", "跟你说对不起",
+    "请原谅", "请你原谅", "再给我一次机会", "我会改的", "我一定改",
+    "我反省了", "我想通了", "我知道自己错了",
+    # 哄/安慰
+    "别生气", "不生气", "消消气", "别闹了", "不要闹", "别气了", "好啦好啦",
+    "不许生气", "别难过了", "别伤心", "别委屈", "不委屈", "乖啦", "别哭了",
+    "别不开心", "开心一点", "笑一个", "别皱眉", "别郁闷", "别烦了", "别焦虑",
+    "别担心", "没事的", "没关系", "不要紧", "无所谓啦", "算了算了",
+    "别气了嘛", "不要生气啦", "气消了吗", "还在生气吗", "还生气吗",
+    "心情好点了吗", "开心点", "振作一点", "一切都会好的",
+    "有我在呢", "我在这", "我在这里", "我一直都在", "我哪儿也不去",
+    # 甜蜜/亲密称呼
+    "乖", "宝贝", "小可爱", "好宝宝", "亲爱的", "心肝", "小宝贝",
+    "亲亲", "抱抱", "摸摸头", "摸头", "揉揉", "蹭蹭", "蹭蹭你",
+    "给你揉揉", "帮你揉揉", "给你捶背", "给你按摩",
+    # 表白式哄
+    "爱你", "喜欢你", "想你", "心疼你", "舍不得", "不忍心", "在乎你",
+    "你最好了", "你最棒", "你真好", "你真可爱", "你好乖", "你好厉害",
+    "我宠你", "我疼你", "我哄你", "我陪你", "我不会走", "我不离开",
+    "我最喜欢你", "我最在乎你", "你是我的小宝贝", "你是我最重要的人",
+    "失去你我会难过", "你对我很重要", "你不可替代",
+    # 求原谅
+    "原谅我", "原谅我吧", "求原谅", "宽恕我", "大人有大量",
+    "你就原谅我吧", "求求你了", "最后一次", "真的最后一次",
+    # 物质补偿
+    "给你买好吃的", "请你吃饭", "给你买糖", "给你带好吃的",
+    "给你买礼物", "给你惊喜", "你想吃什么", "满足你",
+    # 承诺改过
+    "下次不敢了", "再也不会了", "保证下次不会", "我发誓",
+    "我保证", "绝不再犯", "痛改前非", "洗心革面", "重新做人",
+    # 撒娇式道歉
+    "你最好看", "你最可爱", "你最好了", "我最爱你",
+    "不要生气嘛", "不生气嘛", "好不好嘛", "行不行嘛", "好不好",
+    "我错了还不行吗", "知道错了", "真的知道错了", "深刻反省",
+    "饶了我吧", "放我一马", "手下留情", "高抬贵手",
+    "你大人不记小人过", "宰相肚里能撑船",
+    # 语气词/表情包式
+    "呜呜", "呜呜呜", "嘤嘤", "嘤嘤嘤", "qaq", "555", "qaq",
+    "/(ㄒoㄒ)/", "T_T", "TAT", "Orz",
+    # 日语/网络道歉
+    "すみません", "ごめん", "ごめんなさい", "orz", "sry",
+    # 中式方言道歉
+    "对不住", "不好意思哦", "抱歉抱歉", "实在对不起",
+    "真对不住", "我给您赔不是",
+    # 自责式
+    "是我混蛋", "我是笨蛋", "我脑子进水了", "我抽风了",
+    "我刚才脑子不好使", "我刚才说话不过脑子",
+    "我太冲动了", "我脾气不好", "我控制不住自己",
+    "我太自私了", "我没考虑你感受", "我太幼稚了",
+}
+_IGNORE_WORDS = {
+    # 直接攻击
+    "笨", "傻", "滚", "烦", "讨厌", "没用", "弱智", "有病", "你烦", "不理",
+    "滚开", "闭嘴", "神经病", "无聊", "弱", "太差", "垃圾",
+    "闭嘴吧", "你闭嘴", "别说话", "不想听你说", "你别说了",
+    # 延伸攻击
+    "蠢", "蠢货", "白痴", "废物", "饭桶", "笨蛋", "蠢猪", "猪头", "脑残",
+    "智障", "sb", "tmd", "md", "nmsl", "cnm", "草", "靠", "卧槽",
+    "去死", "你去死", "死吧", "烦死了", "烦死", "恶心", "真恶心",
+    "碍眼", "滚蛋", "走开", "别烦我", "不想理你", "懒得理你",
+    "你算什么", "你算什么东西", "算了吧", "拉倒吧", "扯淡",
+    "没意思", "好无聊", "真无聊", "太无聊了", "没劲", "无聊死了",
+    "菜", "太菜了", "菜鸡", "菜鸟", "真菜", "不行", "太差了", "差劲",
+    "垃圾玩意", "废物点心", "啥也不是", "什么都不是", "就这?",
+    "看不起", "不屑", "懒得理", "不稀罕", "不需要你",
+    "吵死了", "吵", "别吵", "安静点", "太吵了",
+    "真烦", "好烦", "烦死了", "烦人", "真讨厌", "讨厌死了",
+    # 网络用语/缩写骂人
+    "nmb", "cnmb", "泥马", "你马", "尼玛", "拟妈", "你吗",
+    "煞笔", "沙比", "煞", "呆逼", "逗比", "二逼", "二b", "沙雕",
+    "哈批", "哈比", "脑瘫", "脑抽", "脑子有坑", "脑子有问题",
+    "神经", "精神病", "有病吧", "有病啊", "有毛病",
+    # 否定/冷漠
+    "不关心", "谁在乎", "关我屁事", "关你屁事", "干我何事",
+    "与我无关", "不关我事", "别找我", "别来烦我", "别靠近我",
+    "不想理", "懒得管", "随便你", "爱咋咋地", "爱谁谁",
+    "无所谓", "不在乎", "无所谓了", "随便啦", "你开心就好",
+    "有你没你都一样", "你不在也行", "没你也行",
+    # 讽刺/挖苦
+    "厉害了", "真行啊", "你可真厉害", "了不起", "可把你厉害的",
+    "膨胀了", "飘了", "你上天吧", "你咋不上天",
+    "就这水平", "就这?", "就这点本事", "也不过如此",
+    "高估你了", "想太多", "你以为你是谁",
+    # 贬低
+    "你不行", "你配吗", "你不够格", "你不配", "你也配",
+    "有什么了不起", "不就那样吗", "有什么好得意的",
+    "你也就是", "你不就是", "不过如此",
+    # 冷暴力
+    "呵呵", "哦", "嗯", "随便", "都行", "你说了算",
+    "好的吧", "行吧", "你说什么就是什么吧",
+    "不想说话", "没心情", "别跟我说话", "一个人待着",
+    "你让我一个人静静", "我想一个人", "别理我", "离我远点",
+    # 威胁/离开
+    "分手", "绝交", "拉黑", "删除好友", "再也不见",
+    "以后别联系了", "到此为止", "我们完了", "玩完了",
+    "再见", "再也不见", "拜拜了您嘞",
+}
+_SHY_WORDS = {
+    # 表白/暧昧
+    "喜欢你", "想你", "担心你", "你在干嘛", "你住哪", "你多大", "有对象吗",
+    "想抱你", "想亲你", "好可爱", "好乖",
+    "喜欢你哦", "我好喜欢你", "超级喜欢你", "特别喜欢你",
+    "我对你有感觉", "我对你有意思", "我觉得你很特别",
+    "想你了呀", "在想你", "我在想你", "脑海里都是你",
+    # 暧昧升级
+    "想牵你", "想搂你", "想和你在一起", "做我女朋友", "做我男朋友",
+    "我养你", "我照顾你", "你是我的", "我要你", "想你了", "好想你",
+    "超想你", "特别想你", "一直想你", "每时每刻都想你",
+    "你是我最特别的人", "你和别人不一样", "你是我唯一",
+    "喜欢和你聊天", "和你在一起很开心", "有你在真好",
+    "你真的好可爱", "你怎么这么可爱", "可爱死了",
+    "你太好了", "你对我太好了", "你是最棒的",
+    "我只告诉你", "只对你说", "偷偷告诉你", "悄悄话",
+    "心动", "小鹿乱撞", "心跳加速", "脸红了",
+    "你好帅", "你好美", "好漂亮", "太好看了", "颜值好高",
+    "身材好好", "太有魅力了", "迷死我了",
+    "嫁给你", "娶你", "在一起", "一辈子",
+    # 更多表白
+    "我爱你", "我超爱你", "我太爱你了", "我对你的爱",
+    "你是我的小天使", "你是我的宝贝", "你是我的小甜心",
+    "有你真好", "你让我心动", "你让我幸福",
+    "想每天见到你", "想一直陪着你", "想和你一直在一起",
+    "你是我见过最好的人", "遇到你真幸运", "你是我生命中的光",
+    # 撒娇式亲密
+    "嘿嘿", "嘻嘻", "哈哈你好可爱", "你好萌", "萌死了",
+    "好萌啊", "太萌了", "萌萌哒", "软萌", "甜", "好甜", "超甜",
+    "你笑起来好好看", "你笑的样子好美", "你的声音好好听",
+    "你眼睛好好看", "你头发好香", "你好温柔",
+    "你好暖", "暖男", "暖女", "贴心", "好贴心", "太贴心了",
+    # 关心式亲密
+    "你吃饭了吗", "早点睡", "晚安", "早安", "想你晚安",
+    "注意身体", "别熬夜", "多喝水", "照顾好自己",
+    "今天累不累", "辛苦了", "你辛苦了", "好好休息",
+    "别太累了", "注意休息", "天冷了多穿点",
+    # 暧昧称呼
+    "小可爱", "小宝贝", "小甜甜", "小仙女", "小帅哥",
+    "大宝贝", "宝", "宝贝儿", "亲爱的", "亲",
+    "老婆", "老公", "媳妇", "对象", "心上人",
+    # 粉红泡泡
+    "暗恋你", "偷偷喜欢你", "默默关注你", "一直在看你的消息",
+    "你发消息我就好开心", "看到你消息就笑了",
+    "和你聊天最开心", "最期待和你聊天",
+    "你就是我的小太阳", "你就是我的全世界",
+    "想和你看星星", "想和你散步", "想和你约会",
+    "第一次见到你就", "越看越喜欢", "越来越喜欢你",
+    # 网络/二次元
+    "awsl", "awsl", "啊我死了", "磕到了", "磕死我了",
+    "太上头了", "心动的感觉", "恋爱的感觉",
+    "甜甜的恋爱", "酸了", "柠檬精", "我酸了",
+}
 _last_chat_time: Optional[datetime] = None
+
+# 每用户正常消息计数器，用于傲娇自动解除
+_normal_msg_count: dict = {}  # user_id -> count since last grumpy
+
+
+def _auto_detect_interaction(message: str, user_id: str = "default"):
+    global _normal_msg_count
+    try:
+        from lingxi_qwenpaw.bridge import get_emotion_engine, get_life_engine
+        emotion_engine = get_emotion_engine(user_id)
+        life_engine = get_life_engine(user_id)
+
+        now = datetime.now()
+        msg = message.lower()
+        _last_chat_time = now
+
+        if any(w in msg for w in _APOLOGY_WORDS):
+            effect = emotion_engine.on_user_apologize()
+            life_engine.apply_emotion_effect(effect)
+            _create_user_interact_event("user_apologized", message, life_engine.state, user_id=user_id)
+            # 重置正常消息计数
+            _normal_msg_count[user_id] = 0
+            return
+
+        if any(w in msg for w in _PRAISE_WORDS):
+            effect = emotion_engine.on_user_compliment()
+            life_engine.apply_emotion_effect(effect)
+            _create_user_interact_event("user_complimented", message, life_engine.state, user_id=user_id)
+            _normal_msg_count[user_id] = 0
+            return
+
+        if any(w in msg for w in _SHY_WORDS):
+            effect = emotion_engine.trigger("embarrassment", 0.6, "被关注/问私人问题")
+            life_engine.apply_emotion_effect(effect)
+            return
+
+        if any(w in msg for w in _IGNORE_WORDS):
+            effect = emotion_engine.on_user_ignore()
+            life_engine.apply_emotion_effect(effect)
+            _create_user_interact_event("user_ignored", message, life_engine.state, user_id=user_id)
+            _normal_msg_count[user_id] = 0
+            return
+
+        # 普通消息（非 praise/apology/ignore）
+        # 傲娇时：连续 3 句正常对话自动解除
+        if emotion_engine.is_grumpy:
+            count = _normal_msg_count.get(user_id, 0) + 1
+            _normal_msg_count[user_id] = count
+            if count >= 10:
+                effect = emotion_engine.force_reset_grumpy()
+                life_engine.apply_emotion_effect(effect)
+                _normal_msg_count[user_id] = 0
+                print(f"[emotion_engine] 傲娇自动解除：用户说了 {count} 句正常话")
+        else:
+            _normal_msg_count[user_id] = 0
+
+    except Exception as e:
+        logger.error(f"互动检测错误: {e}", exc_info=True)
 
 
 def _classify_intent(message: str) -> str:
@@ -225,45 +673,9 @@ def _create_user_interact_event(interaction_type: str, message: str, life_state,
             user_id=user_id,
         )
     except Exception as e:
-        print(f"[auto_detect] 创建 user_interact 事件失败: {e}")
+        logger.error(f"创建 user_interact 事件失败: {e}", exc_info=True)
 
 
-def _auto_detect_interaction(message: str, user_id: str = "default"):
-    global _last_chat_time
-    try:
-        from lingxi_qwenpaw.bridge import get_emotion_engine, get_life_engine
-        emotion_engine = get_emotion_engine(user_id)
-        life_engine = get_life_engine(user_id)
-
-        now = datetime.now()
-        msg = message.lower()
-        _last_chat_time = now
-
-        if any(w in msg for w in _APOLOGY_WORDS):
-            effect = emotion_engine.on_user_apologize()
-            life_engine.apply_emotion_effect(effect)
-            _create_user_interact_event("user_apologized", message, life_engine.state, user_id=user_id)
-            return
-
-        if any(w in msg for w in _PRAISE_WORDS):
-            effect = emotion_engine.on_user_compliment()
-            life_engine.apply_emotion_effect(effect)
-            _create_user_interact_event("user_complimented", message, life_engine.state, user_id=user_id)
-            return
-
-        if any(w in msg for w in _SHY_WORDS):
-            effect = emotion_engine.trigger("embarrassment", 0.6, "被关注/问私人问题")
-            life_engine.apply_emotion_effect(effect)
-            return
-
-        if any(w in msg for w in _IGNORE_WORDS):
-            effect = emotion_engine.on_user_ignore()
-            life_engine.apply_emotion_effect(effect)
-            _create_user_interact_event("user_ignored", message, life_engine.state, user_id=user_id)
-            return
-
-    except Exception as e:
-        print(f"[auto_detect] 互动检测错误: {e}")
 
 
 # ─── Dream 定时任务 ────────────────────────────────────────────────
@@ -282,9 +694,9 @@ async def _dream_loop():
                         try:
                             deleted = mm.cleanup_expired(user_id=uid)
                             if deleted:
-                                print(f"[dream] 清理过期记忆: user={uid}, deleted={deleted}")
+                                logger.info(f"清理过期记忆: user={uid}, deleted={deleted}")
                         except Exception as e:
-                            print(f"[dream] cleanup_expired 失败: {e}")
+                            logger.error(f"cleanup_expired 失败: {e}", exc_info=True)
                 try:
                     from lingxi_qwenpaw.plugins.life_trajectory import memory_consolidator, build_narrative_threads
                     for uid, _ in _memory_managers.items():
@@ -293,7 +705,7 @@ async def _dream_loop():
                 except Exception:
                     pass
         except Exception as e:
-            print(f"[dream] 失败: {e}")
+            logger.error(f"dream 任务失败: {e}", exc_info=True)
 
 
 def _persist_dialog_message(content: str, role: str, user_id: str):
@@ -319,7 +731,7 @@ def _persist_dialog_message(content: str, role: str, user_id: str):
         with open(fp, "a", encoding="utf-8") as f:
             f.write(json.dumps(msg, ensure_ascii=False) + "\n")
     except Exception as e:
-        print(f"[_persist_dialog_message] 失败: {e}")
+        logger.error(f"持久化对话消息失败: {e}", exc_info=True)
 
 
 # ─── 初始化种子数据 ────────────────────────────────────────────────
@@ -391,9 +803,9 @@ def _seed_initial_data(user_id: str):
                 user_id=user_id,
             )
         except Exception as e:
-            print(f"[seed] 初始化朋友圈失败: {e}")
+            logger.error(f"初始化朋友圈失败: {e}", exc_info=True)
 
-    print(f"[seed] 用户 {user_id} 初始化了 {len(seed_posts)} 条朋友圈")
+    logger.info(f"用户 {user_id} 初始化了 {len(seed_posts)} 条朋友圈")
 
 
 # ─── 主聊天逻辑 ────────────────────────────────────────────────────
@@ -430,7 +842,7 @@ async def _do_chat(message: str, user_id: str, image_base64: Optional[str] = Non
 
         life_engine.on_user_message(message)
     except Exception as ex:
-        print(f"[do_chat] 情绪感知错误: {ex}")
+        logger.error(f"情绪感知错误: {ex}", exc_info=True)
 
     _auto_detect_interaction(message, user_id=user_id)
 
@@ -438,9 +850,7 @@ async def _do_chat(message: str, user_id: str, image_base64: Optional[str] = Non
     try:
         reply = await _react_loop(message, user_id)
     except Exception as e:
-        print(f"[_do_chat] _react_loop failed: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"_react_loop 失败: {type(e).__name__}: {e}", exc_info=True)
         reply = f"嗯，我在呢。你说：{message[:20]}..."
 
     # 3. 记录交互
@@ -453,7 +863,7 @@ async def _do_chat(message: str, user_id: str, image_base64: Optional[str] = Non
         _persist_dialog_message(message, "user", user_id)
         _persist_dialog_message(reply, "assistant", user_id)
     except Exception as e:
-        print(f"[do_chat] 记忆记录错误: {e}")
+        logger.error(f"记忆记录错误: {e}", exc_info=True)
 
     # 4. 检查模式
     try:
@@ -461,7 +871,7 @@ async def _do_chat(message: str, user_id: str, image_base64: Optional[str] = Non
         pattern_engine = get_pattern_engine(user_id)
         pattern_engine.check_and_detect(message, "general", {}, user_id=user_id)
     except Exception as e:
-        print(f"[do_chat] 模式检测错误: {e}")
+        logger.error(f"模式检测错误: {e}", exc_info=True)
 
     # 5. 完成任务自动发朋友圈
     if any(kw in message for kw in ["完成", "搞定了", "done", "搞掂"]):
@@ -469,7 +879,7 @@ async def _do_chat(message: str, user_id: str, image_base64: Optional[str] = Non
             from lingxi_qwenpaw.plugins.social_timeline import timeline
             timeline.auto_publish("task_complete", {"task_content": message}, user_id=user_id)
         except Exception as e:
-            print(f"[do_chat] 朋友圈发布错误: {e}")
+            logger.error(f"朋友圈发布错误: {e}", exc_info=True)
 
     # 6. 获取状态
     try:
@@ -481,7 +891,7 @@ async def _do_chat(message: str, user_id: str, image_base64: Optional[str] = Non
         life_state = life_engine.get_state()
         insights = pattern_engine.get_insights(unread_only=True)
     except Exception as e:
-        print(f"[do_chat] 获取状态错误: {e}")
+        logger.error(f"获取状态错误: {e}", exc_info=True)
         emotion_state = {}
         life_state = {}
         insights = []
@@ -531,7 +941,7 @@ async def _analyze_image(image_base64: str, user_message: str = "") -> str:
             data = response.json()
             return data["choices"][0]["message"]["content"]
     except Exception as e:
-        print(f"[vision] 图片分析失败: {e}")
+        logger.error(f"图片分析失败: {e}", exc_info=True)
         return f"[图片分析失败：{str(e)}]"
 
 
@@ -560,7 +970,7 @@ def _normalize_image(image_base64: str) -> str | None:
         jpeg_b64 = b64.b64encode(buf.getvalue()).decode()
         return f"data:image/jpeg;base64,{jpeg_b64}"
     except Exception as e:
-        print(f"[vision] 图片归一化失败: {e}")
+        logger.error(f"图片归一化失败: {e}", exc_info=True)
         return None
 
 
@@ -568,7 +978,44 @@ def _normalize_image(image_base64: str) -> str | None:
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "灵犀·校园"}
+    """
+    健康检查端点
+    
+    返回服务状态、数据库连接状态、运行时长等信息
+    如果数据库连接失败，返回 503 状态码
+    """
+    # 计算运行时长
+    uptime_seconds = int(time.time() - _SERVICE_START_TIME)
+    
+    # 检查数据库连接状态
+    database_status = "connected"
+    try:
+        from lingxi_qwenpaw.db import get_session
+        from sqlalchemy import text
+        # 尝试获取一个会话并执行简单查询
+        with get_session("default") as session:
+            session.execute(text("SELECT 1"))
+    except Exception as e:
+        logger.error(f"数据库连接检查失败: {e}", exc_info=True)
+        database_status = "disconnected"
+    
+    # 构建响应数据
+    response_data = {
+        "status": "healthy" if database_status == "connected" else "unhealthy",
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "version": "1.0.0",
+        "database": database_status,
+        "uptime_seconds": uptime_seconds,
+    }
+    
+    # 如果数据库连接失败，返回 503 状态码
+    if database_status == "disconnected":
+        return JSONResponse(
+            status_code=503,
+            content=response_data,
+        )
+    
+    return response_data
 
 
 # ─── 聊天（需要登录）───────────────────────────────────────────────
@@ -648,31 +1095,75 @@ async def chat_stream(req: ChatRequest, user_id: str = Depends(require_user)):
 # ─── 业务接口（需要登录）───────────────────────────────────────────
 
 @app.get("/tasks")
-async def list_tasks(status: str = "pending", limit: int = 50, user_id: str = Depends(require_user)):
+async def list_tasks(
+    status: str = "pending",
+    page: int = 1,
+    page_size: int = 20,
+    user_id: str = Depends(require_user)
+):
+    """
+    获取任务列表
+
+    使用分页响应格式返回任务列表。
+
+    参数：
+    - status: 任务状态（pending/done/all）
+    - page: 页码（从 1 开始）
+    - page_size: 每页数量（1-100）
+
+    返回格式：
+    {
+        "success": true,
+        "items": [...],
+        "total": 100,
+        "page": 1,
+        "page_size": 20,
+        "total_pages": 5
+    }
+    """
     from lingxi_qwenpaw.db import get_session, Task
     from lingxi_qwenpaw.tools import _normalize_deadline
+
+    # 限制 page_size 范围
+    page_size = min(max(page_size, 1), 100)
+
     with get_session(user_id) as sess:
         query = sess.query(Task)
         if status != "all":
             query = query.filter(Task.status == status)
-        tasks = query.order_by(Task.urgency.desc(), Task.created_at.desc()).limit(limit).all()
-        return {
-            "tasks": [
-                {
-                    "id": t.id,
-                    "content": t.content,
-                    "status": t.status,
-                    "urgency": t.urgency,
-                    "deadline": _normalize_deadline(t.deadline) if t.deadline else None,
-                    "effort": t.effort,
-                    "item_type": t.item_type,
-                    "tags": t.tags or [],
-                    "waiting_for": t.waiting_for,
-                    "created_at": t.created_at.isoformat() if t.created_at else None,
-                }
-                for t in tasks
-            ]
-        }
+
+        # 获取总数
+        total = query.count()
+
+        # 分页查询
+        tasks = query.order_by(Task.urgency.desc(), Task.created_at.desc()) \
+            .offset((page - 1) * page_size) \
+            .limit(page_size) \
+            .all()
+
+        items = [
+            {
+                "id": t.id,
+                "content": t.content,
+                "status": t.status,
+                "urgency": t.urgency,
+                "deadline": _normalize_deadline(t.deadline) if t.deadline else None,
+                "effort": t.effort,
+                "item_type": t.item_type,
+                "tags": t.tags or [],
+                "waiting_for": t.waiting_for,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in tasks
+        ]
+
+    return paginated_response(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        message="获取任务列表成功"
+    )
 
 
 @app.post("/tasks/{task_id}/complete")
@@ -731,23 +1222,56 @@ async def get_journals(limit: int = 10, user_id: str = Depends(require_user)):
 
 @app.get("/ledger/summary")
 async def get_ledger_summary(month: str = "", user_id: str = Depends(require_user)):
+    """
+    获取账本摘要
+
+    使用统一响应格式返回账本摘要数据。
+
+    参数：
+    - month: 月份（格式：YYYY-MM），默认当前月份
+
+    返回格式：
+    {
+        "success": true,
+        "data": {
+            "income": 1000.0,
+            "expense": 500.0,
+            "balance": 500.0,
+            "records": [...]
+        },
+        "message": "获取账本摘要成功"
+    }
+    """
     from lingxi_qwenpaw.db import get_session, LedgerRecord
     from datetime import date
+
     if not month:
         month = date.today().strftime("%Y-%m")
+
     with get_session(user_id) as sess:
         records = sess.query(LedgerRecord).filter(LedgerRecord.date.startswith(month)).all()
         income = sum(r.amount for r in records if r.record_type == "income")
         expense = sum(r.amount for r in records if r.record_type == "expense")
-        return {
+
+        data = {
             "income": income,
             "expense": expense,
             "balance": income - expense,
+            "month": month,
             "records": [
-                {"id": r.id, "type": r.record_type, "amount": r.amount, "category": r.category, "note": r.note or "", "date": r.date}
+                {
+                    "id": r.id,
+                    "type": r.record_type,
+                    "amount": r.amount,
+                    "category": r.category,
+                    "note": r.note or "",
+                    "date": r.date
+                }
                 for r in records
             ]
         }
+
+    return success_response(data=data, message="获取账本摘要成功")
 
 
 @app.get("/patterns")
@@ -836,7 +1360,9 @@ async def lingxi_interact(action: str, user_id: str = Depends(require_user)):
     elif action in ("coax", "placate", "哄"):
         effect = emotion_engine.force_reset_grumpy()
         life_engine.apply_emotion_effect(effect)
-        result = {"success": True, "content": "好吧好吧，这次就原谅你了～"}
+        # 用 LLM 生成傲娇退出语，而不是固定文案
+        recovery = emotion_engine.get_grumpy_recovery_response()
+        result = {"success": True, "content": recovery}
     elif action in ("comfort", "安慰"):
         effect = emotion_engine.on_user_comfort()
         life_engine.apply_emotion_effect(effect)
@@ -1018,7 +1544,7 @@ async def voice_transcribe(audio: UploadFile = File(...), user_id: str = Depends
             result = response.json()
             return {"text": result.get("text", "").strip(), "success": True}
     except Exception as e:
-        print(f"[stt] 语音转写失败: {e}")
+        logger.error(f"语音转写失败: {e}", exc_info=True)
         return {"text": "", "success": False, "error": str(e)}
 
 

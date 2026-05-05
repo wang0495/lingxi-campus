@@ -1,0 +1,25 @@
+{
+  "name": "video-promo",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "remotion studio",
+    "build": "remotion render LingxiPromo out/video.mp4",
+    "preview": "remotion preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@remotion/cli": "^4.0.457",
+    "@remotion/player": "^4.0.457",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "remotion": "^4.0.457"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "typescript": "^5.9.3"
+  }
+}

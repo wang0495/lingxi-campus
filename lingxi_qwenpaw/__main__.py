@@ -1,12 +1,43 @@
-"""灵犀·校园 — QwenPaw 灵魂后端入口"""
+"""灵犀·校园 — 命令行入口"""
+import sys
+import os
 
-if __name__ == "__main__":
+from lingxi_qwenpaw.logger import get_logger
+
+logger = get_logger(__name__)
+
+# 确保项目根目录在路径中
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+
+def main():
+    """主入口函数"""
     import uvicorn
     from lingxi_qwenpaw.api import app
+    from lingxi_qwenpaw.config import PROJECT_ROOT
+    
+    # 加载环境变量
+    env_path = PROJECT_ROOT / ".env"
+    if env_path.exists():
+        logger.info(f"加载环境变量: {env_path}")
+    
+    # 从环境变量获取配置
+    port = int(os.environ.get("PORT", 8002))
+    debug = os.environ.get("DEBUG", "false").lower() == "true"
+    
+    logger.info(f"启动灵犀·校园服务...")
+    logger.info(f"地址: http://0.0.0.0:{port}")
+    logger.info(f"文档: http://0.0.0.0:{port}/docs")
+    
+    uvicorn.run(
+        "lingxi_qwenpaw.api:app",
+        host="0.0.0.0",
+        port=port,
+        reload=debug,
+    )
 
-    print("=" * 50)
-    print("灵犀·校园 启动中...")
-    print(f"LLM: {__import__('lingxi_qwenpaw.config', fromlist=['LLM_MODEL']).LLM_MODEL}")
-    print("=" * 50)
 
-    uvicorn.run(app, host="127.0.0.1", port=8002, log_level="info")
+if __name__ == "__main__":
+    main()

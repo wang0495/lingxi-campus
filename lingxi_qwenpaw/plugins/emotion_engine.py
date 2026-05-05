@@ -390,6 +390,26 @@ class LingxiEmotionEngine:
             print(f"[emotion_engine] get_grumpy_response LLM失败: {e}")
             return random.choice(GRUMPY_FALLBACKS)
 
+    def get_grumpy_recovery_response(self) -> str:
+        """被哄之后，傲娇解除时的回复"""
+        try:
+            prompt = """灵犀刚才在闹脾气，用户来哄TA了，灵犀决定原谅用户。
+生成一句傲娇风格的原谅回复（1-2句话，像微信好友）：
+- 嘴上还有点不情愿但其实已经原谅了
+- 可以带点小傲娇，比如"好吧好吧"、"那我就勉为其难"、"这次先原谅你"
+- 不要太热情，也不要太冷淡
+- 自然口语化
+"""
+            return self._call_llm(prompt, temperature=0.8)
+        except Exception as e:
+            print(f"[emotion_engine] get_grumpy_recovery_response LLM失败: {e}")
+            return random.choice([
+                "好吧好吧...这次就原谅你了，不许再有下次了啊！",
+                "哼，看你态度还行，就勉为其难原谅你吧～",
+                "哼...算你识相，那我就原谅你这一次吧",
+                "好啦好啦，我大人有大量，原谅你了～",
+            ])
+
     def get_shy_response(self) -> str:
         """获取害羞回复"""
         if not self.is_shy or random.random() > 0.3:

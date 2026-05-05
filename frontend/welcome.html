@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>灵犀·校园 - 有灵魂的数字伙伴</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --secondary: #8b5cf6;
+            --accent: #06b6d4;
+            --bg: #0a0a0f;
+            --bg-secondary: #13131f;
+            --text: #ffffff;
+            --text-muted: #a1a1aa;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* 粒子背景 */
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .particle {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: var(--primary);
+            border-radius: 50%;
+            opacity: 0;
+            animation: float 15s infinite;
+            box-shadow: 0 0 6px var(--primary);
+        }
+
+        @keyframes float {
+            0% {
+                opacity: 0;
+                transform: translateY(100vh) translateX(0);
+            }
+            10% {
+                opacity: 0.6;
+            }
+            90% {
+                opacity: 0.6;
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-100vh) translateX(100px);
+            }
+        }
+
+        /* 流动渐变背景 */
+        .gradient-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, var(--primary), var(--secondary), var(--accent), var(--primary));
+            filter: blur(150px);
+            opacity: 0.15;
+            animation: rotate 30s linear infinite;
+            z-index: 0;
+        }
+
+        @keyframes rotate {
+            from {
+                transform: translate(-25%, -25%) rotate(0deg);
+            }
+            to {
+                transform: translate(-25%, -25%) rotate(360deg);
+            }
+        }
+
+        /* 主容器 */
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 40px;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 20px 40px;
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .navbar-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text);
+            text-decoration: none;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .logo-icon::before {
+            content: '';
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle, #fff 0%, var(--primary) 50%, transparent 70%);
+            border-radius: 50%;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text);
+        }
+
+        /* Hero 区域 */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 120px 40px 80px;
+        }
+
+        .hero-content {
+            max-width: 900px;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 100px;
+            font-size: 14px;
+            color: var(--primary);
+            margin-bottom: 32px;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        .hero-badge::before {
+            content: '✨';
+        }
+
+        .hero-title {
+            font-size: 80px;
+            font-weight: 900;
+            letter-spacing: -2px;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, var(--text) 0%, var(--primary) 50%, var(--secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: fadeInUp 0.8s ease-out 0.1s backwards;
+        }
+
+        .hero-subtitle {
+            font-size: 28px;
+            font-weight: 300;
+            color: var(--text-muted);
+            margin-bottom: 48px;
+            letter-spacing: 2px;
+            animation: fadeInUp 0.8s ease-out 0.2s backwards;
+        }
+
+        .hero-description {
+            font-size: 18px;
+            color: var(--text-muted);
+            margin-bottom: 48px;
+            line-height: 1.8;
+            animation: fadeInUp 0.8s ease-out 0.3s backwards;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            animation: fadeInUp 0.8s ease-out 0.4s backwards;
+        }
+
+        .btn {
+            padding: 16px 40px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: var(--text);
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 40px rgba(99, 102, 241, 0.6);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 特性区域 */
+        .features {
+            padding: 100px 40px;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 80px;
+        }
+
+        .section-title {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 16px;
+        }
+
+        .section-subtitle {
+            font-size: 18px;
+            color: var(--text-muted);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 32px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 24px;
+            padding: 40px;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.1);
+            transform: translateY(-5px);
+        }
+
+        .feature-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.1));
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin-bottom: 24px;
+        }
+
+        .feature-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .feature-desc {
+            font-size: 15px;
+            color: var(--text-muted);
+            line-height: 1.7;
+        }
+
+        /* 情绪系统展示 */
+        .emotion-section {
+            padding: 100px 40px;
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        .emotion-grid {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            flex-wrap: wrap;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .emotion-card {
+            width: 180px;
+            text-align: center;
+            padding: 32px 24px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            transition: all 0.3s;
+        }
+
+        .emotion-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .emotion-emoji {
+            font-size: 64px;
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .emotion-label {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .emotion-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* 下载区域 */
+        .download-section {
+            padding: 100px 40px;
+            text-align: center;
+        }
+
+        .download-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 32px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .download-card {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.05));
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 32px;
+            padding: 48px 32px;
+            transition: all 0.3s;
+        }
+
+        .download-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(99, 102, 241, 0.4);
+            box-shadow: 0 10px 40px rgba(99, 102, 241, 0.2);
+        }
+
+        .download-platform-icon {
+            font-size: 64px;
+            margin-bottom: 24px;
+        }
+
+        .download-platform-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .download-title {
+            font-size: 36px;
+            font-weight: 800;
+            margin-bottom: 16px;
+        }
+
+        .download-desc {
+            font-size: 16px;
+            color: var(--text-muted);
+            margin-bottom: 32px;
+        }
+
+        .download-info {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            margin-bottom: 24px;
+        }
+
+        .download-info-item {
+            text-align: center;
+        }
+
+        .download-info-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .download-info-value {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .download-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 48px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: var(--text);
+            border-radius: 16px;
+            font-size: 18px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s;
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.4);
+        }
+
+        .download-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 40px rgba(99, 102, 241, 0.6);
+        }
+
+        .download-card-disabled {
+            opacity: 0.6;
+        }
+
+        .download-button-disabled {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 48px;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-muted);
+            border-radius: 16px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: not-allowed;
+        }
+
+        .download-note {
+            margin-top: 24px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* 页脚 */
+        .footer {
+            padding: 60px 40px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            text-align: center;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .footer-logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .footer-text {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            list-style: none;
+        }
+
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: var(--text);
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 48px;
+            }
+
+            .hero-subtitle {
+                font-size: 20px;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .download-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .download-info {
+                flex-direction: column;
+                gap: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 粒子背景 -->
+    <div class="particles" id="particles"></div>
+    <div class="gradient-bg"></div>
+
+    <!-- 导航栏 -->
+    <nav class="navbar">
+        <div class="navbar-content">
+            <a href="#" class="logo">
+                <div class="logo-icon"></div>
+                灵犀·校园
+            </a>
+            <ul class="nav-links">
+                <li><a href="#features">核心特性</a></li>
+                <li><a href="#emotion">情绪系统</a></li>
+                <li><a href="#download">下载体验</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero 区域 -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-badge">AI原生 · 情绪引擎 · 数字生命</div>
+            <h1 class="hero-title">灵犀·校园</h1>
+            <p class="hero-subtitle">有灵魂的数字伙伴</p>
+            <p class="hero-description">
+                不只是AI，更是朋友。基于情绪引擎和数字生命技术，<br>
+                灵犀会记住你的故事，理解你的情绪，陪伴你的成长。
+            </p>
+            <div class="hero-buttons">
+                <a href="#download" class="btn btn-primary">立即下载</a>
+                <a href="#features" class="btn btn-secondary">了解更多</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- 核心特性 -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">核心特性</h2>
+                <p class="section-subtitle">重新定义AI交互体验</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎭</div>
+                    <h3 class="feature-title">真实情绪系统</h3>
+                    <p class="feature-desc">基于 Plutchik 情绪轮，灵犀会开心、会难过、也会闹脾气。情绪会随着对话和互动实时变化。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💫</div>
+                    <h3 class="feature-title">数字生命引擎</h3>
+                    <p class="feature-desc">有精力、心情、社交需求，会主动找你聊天、发朋友圈，有自己的生活节奏和作息规律。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🧠</div>
+                    <h3 class="feature-title">四层记忆系统</h3>
+                    <p class="feature-desc">观察层、经验层、模式层、心智模型层，会记住你说的话，识别行为模式，越来越懂你。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💬</div>
+                    <h3 class="feature-title">自然对话</h3>
+                    <p class="feature-desc">像微信好友一样聊天，没有机械感，有温度、有个性、有故事。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📱</div>
+                    <h3 class="feature-title">朋友圈互动</h3>
+                    <p class="feature-desc">灵犀会发朋友圈、回复评论，有自己的社交生活，你可以看到它的日常动态。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">❤️</div>
+                    <h3 class="feature-title">情感共鸣</h3>
+                    <p class="feature-desc">温柔是经历出来的，不是训练出来的。灵犀有复杂的经历，能真正理解你的感受。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 情绪系统展示 -->
+    <section class="emotion-section" id="emotion">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">真实的情绪系统</h2>
+                <p class="section-subtitle">会开心、会难过、也会闹脾气</p>
+            </div>
+            <div class="emotion-grid">
+                <div class="emotion-card">
+                    <span class="emotion-emoji">😊</span>
+                    <h3 class="emotion-label">开心</h3>
+                    <p class="emotion-desc">充满活力</p>
+                </div>
+                <div class="emotion-card">
+                    <span class="emotion-emoji">😢</span>
+                    <h3 class="emotion-label">难过</h3>
+                    <p class="emotion-desc">需要陪伴</p>
+                </div>
+                <div class="emotion-card">
+                    <span class="emotion-emoji">😤</span>
+                    <h3 class="emotion-label">傲娇</h3>
+                    <p class="emotion-desc">闹脾气中</p>
+                </div>
+                <div class="emotion-card">
+                    <span class="emotion-emoji">😳</span>
+                    <h3 class="emotion-label">害羞</h3>
+                    <p class="emotion-desc">有点不好意思</p>
+                </div>
+                <div class="emotion-card">
+                    <span class="emotion-emoji">🤗</span>
+                    <h3 class="emotion-label">温暖</h3>
+                    <p class="emotion-desc">温柔体贴</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 下载区域 -->
+    <section class="download-section" id="download">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">立即体验内测版</h2>
+                <p class="section-subtitle">加入灵犀·校园内测计划，成为第一批体验者</p>
+            </div>
+            <div class="download-cards">
+                <!-- Windows 版本 -->
+                <div class="download-card download-card-disabled">
+                    <div class="download-platform-icon">🖥️</div>
+                    <h3 class="download-platform-title">Windows 版</h3>
+                    <div class="download-info">
+                        <div class="download-info-item">
+                            <div class="download-info-label">状态</div>
+                            <div class="download-info-value">开发中</div>
+                        </div>
+                    </div>
+                    <div class="download-button-disabled">
+                        <span>⏳</span>
+                        <span>敬请期待</span>
+                    </div>
+                    <p class="download-note">
+                        * 正在紧张开发中<br>
+                        * 即将上线
+                    </p>
+                </div>
+
+                <!-- Android 版本 -->
+                <div class="download-card download-card-disabled">
+                    <div class="download-platform-icon">📱</div>
+                    <h3 class="download-platform-title">Android 版</h3>
+                    <div class="download-info">
+                        <div class="download-info-item">
+                            <div class="download-info-label">状态</div>
+                            <div class="download-info-value">开发中</div>
+                        </div>
+                    </div>
+                    <div class="download-button-disabled">
+                        <span>⏳</span>
+                        <span>敬请期待</span>
+                    </div>
+                    <p class="download-note">
+                        * 正在紧张开发中<br>
+                        * 即将上线
+                    </p>
+                </div>
+
+                <!-- Web 版本 -->
+                <div class="download-card">
+                    <div class="download-platform-icon">🌐</div>
+                    <h3 class="download-platform-title">Web 版</h3>
+                    <div class="download-info">
+                        <div class="download-info-item">
+                            <div class="download-info-label">版本</div>
+                            <div class="download-info-value">v0.1.0 Beta</div>
+                        </div>
+                        <div class="download-info-item">
+                            <div class="download-info-label">大小</div>
+                            <div class="download-info-value">无需下载</div>
+                        </div>
+                    </div>
+                    <a href="http://129.204.195.175/lingxi/" class="download-button" id="downloadWeb" target="_blank">
+                        <span>🚀</span>
+                        <span>在线体验</span>
+                    </a>
+                    <p class="download-note">
+                        * 支持所有现代浏览器<br>
+                        * 推荐使用 Chrome 或 Edge
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-logo">
+                <div class="logo-icon" style="width: 32px; height: 32px; border-radius: 8px;"></div>
+                灵犀·校园
+            </div>
+            <p class="footer-text">
+                腾讯PCG校园AI产品创意大赛参赛作品<br>
+                有灵魂的数字伙伴
+            </p>
+            <ul class="footer-links">
+                <li><a href="#">关于我们</a></li>
+                <li><a href="#">使用条款</a></li>
+                <li><a href="#">隐私政策</a></li>
+                <li><a href="#">联系我们</a></li>
+            </ul>
+        </div>
+    </footer>
+
+    <script>
+        // 创建粒子
+        const particlesContainer = document.getElementById('particles');
+        const particleCount = 50;
+
+        for (let i = 0; i < particleCount; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.animationDelay = Math.random() * 15 + 's';
+            particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
+            particlesContainer.appendChild(particle);
+        }
+
+        // 平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // 滚动动画
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.feature-card, .emotion-card').forEach(card => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(30px)';
+            card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            observer.observe(card);
+        });
+    </script>
+</body>
+</html>

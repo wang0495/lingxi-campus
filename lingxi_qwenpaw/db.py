@@ -7,11 +7,17 @@ import json
 
 from sqlalchemy import (
     create_engine, Column, Integer, String, Text, Float, Boolean,
-    DateTime, JSON, ForeignKey, inspect
+    DateTime, JSON, ForeignKey, inspect, Index, CheckConstraint
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
+
+from lingxi_qwenpaw.exceptions import DatabaseError
+from lingxi_qwenpaw.logger import get_logger
+
+# 获取日志记录器
+logger = get_logger(__name__)
 
 # 用户数据根目录
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -59,14 +65,19 @@ def _add_missing_columns(engine):
         ("social_posts", "user_id", "VARCHAR(50) DEFAULT 'default'"),
         ("lingxi_life_events", "user_id", "VARCHAR(50) DEFAULT 'default'"),
         ("memory_entries", "recall_count", "INTEGER DEFAULT 0"),
+        # 新增 updated_at 字段
+        ("tasks", "updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
+        ("journal_entries", "updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
+        ("ledger_records", "updated_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
     ]
     with engine.connect() as conn:
         for table, col, col_def in tables_cols:
             try:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_def}"))
                 conn.commit()
-            except Exception:
-                pass  # 列已存在
+            except Exception as e:
+                # 列已存在是正常情况，记录调试日志即可
+                logger.debug(f"添加列 {table}.{col} 失败（可能已存在）: {e}")
 
 
 def _get_engine_and_session(user_id: str):
@@ -100,6 +111,11 @@ def get_session(user_id: Optional[str] = None) -> Session:
 
 class Task(Base):
     __tablename__ = "tasks"
+    __table_args__ = (
+        Index("ix_tasks_user_status", "user_id", "status"),
+        Index("ix_tasks_user_deadline", "user_id", "deadline"),
+        CheckConstraint('urgency >= 1 AND urgency <= 5', name='check_urgency_range'),
+    )
     id = Column(Integer, primary_key=True)
     user_id = Column(String(50), default="default")
     item_type = Column(String(20), default="task")
@@ -111,6 +127,7 @@ class Task(Base):
     tags = Column(JSON, default=list)
     status = Column(String(20), default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     done_at = Column(DateTime, nullable=True)
     deferred_to = Column(String(20), nullable=True)
     waiting_for = Column(String(100), nullable=True)
@@ -134,10 +151,15 @@ class JournalEntry(Base):
     date = Column(String(20))  # YYYY-MM-DD
     text = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class LedgerRecord(Base):
     __tablename__ = "ledger_records"
+    __table_args__ = (
+        Index("ix_ledger_user_date", "user_id", "date"),
+        CheckConstraint('amount >= 0', name='check_amount_non_negative'),
+    )
     id = Column(Integer, primary_key=True)
     user_id = Column(String(50), default="default")
     record_type = Column(String(10))  # income / expense
@@ -147,6 +169,7 @@ class LedgerRecord(Base):
     date = Column(String(20))  # YYYY-MM-DD
     budget_month = Column(String(7), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class UserProfile(Base):
@@ -169,6 +192,9 @@ class UserProfile(Base):
 
 class MemoryEntry(Base):
     __tablename__ = "memory_entries"
+    __table_args__ = (
+        Index("ix_memory_user_layer", "user_id", "layer"),
+    )
     id = Column(Integer, primary_key=True)
     user_id = Column(String(50), default="default")
     layer = Column(String(20))  # observation / experience / pattern / model
