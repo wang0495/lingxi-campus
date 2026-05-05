@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>灵犀·校园 - 有灵魂的数字伙伴</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-primary: #0f0f17;
+  --bg-secondary: #1a1a2e;
+  --bg-tertiary: #16213e;
+  --bg-card: #1e1e2e;
+  --bg-hover: #252542;
+  --text-primary: #e0e0e0;
+  --text-secondary: #888;
+  --text-muted: #555;
+  --accent: #6C5CE7;
+  --accent-light: #a29bfe;
+  --accent-glow: rgba(108,92,231,0.3);
+  --success: #00b894;
+  --warning: #fdcb6e;
+  --danger: #ff7675;
+  --coach-color: #E74C3C;
+  --secretary-color: #4A90E2;
+  --friend-color: #9B59B6;
+  --analyst-color: #27AE60;
+  --border: rgba(255,255,255,0.06);
+  --shadow: 0 4px 16px rgba(0,0,0,0.4);
+  --radius: 12px;
+  --radius-lg: 16px;
+  --sidebar-w: 280px;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+/* ===== LAYOUT ===== */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ===== HEADER ===== */
+.header {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  z-index: 100;
+}
+
+.header-logo {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, var(--accent), #9b59b6);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.status-dot {
+  position: absolute;
+  bottom: -2px; right: -2px;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--success);
+  border: 2px solid var(--bg-secondary);
+  transition: background 0.5s;
+}
+.status-dot.grumpy { background: var(--danger); }
+.status-dot.resting { background: var(--warning); }
+.status-dot.exploring { background: #29B6F6; }
+
+.header-title h1 {
+  font-size: 16px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px;
+}
+.header-title span { font-size: 11px; color: var(--text-secondary); font-weight: 400; }
+.header-subtitle { font-size: 11px; color: var(--text-muted); }
+
+.header-actions { margin-left: auto; display: flex; gap: 8px; }
+.header-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 6px 14px; border-radius: 20px;
+  font-size: 12px; cursor: pointer;
+  transition: all 0.2s;
+}
+.header-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+/* ===== MAIN AREA ===== */
+.main { flex: 1; display: flex; overflow: hidden; }
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.3s ease;
+}
+.sidebar.collapsed { width: 0; border-right: none; }
+
+/* Sidebar Tabs */
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-primary);
+}
+.sidebar-tab {
+  flex: 1; padding: 10px 4px;
+  background: transparent; border: none;
+  color: var(--text-muted); font-size: 16px;
+  cursor: pointer; transition: all 0.2s;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.sidebar-tab span { font-size: 9px; font-weight: 500; }
+.sidebar-tab:hover { color: var(--text-secondary); }
+.sidebar-tab.active {
+  color: var(--accent);
+  background: rgba(108,92,231,0.08);
+  border-bottom: 2px solid var(--accent);
+}
+.sidebar-tab.active span { color: var(--accent); }
+
+/* Sidebar Content */
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-tertiary) transparent;
+}
+.sidebar-content::-webkit-scrollbar { width: 4px; }
+.sidebar-content::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 4px; }
+
+.sidebar-panel { display: none; padding: 12px; }
+.sidebar-panel.active { display: block; }
+
+/* ===== PANEL: LINGXI STATUS ===== */
+.lingxi-card {
+  background: linear-gradient(135deg, #1e1e3a 0%, #2a1a4a 100%);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(108,92,231,0.2);
+  position: relative;
+  overflow: hidden;
+}
+.lingxi-card.grumpy {
+  border-color: var(--danger);
+  animation: grumpyPulse 2s infinite;
+}
+@keyframes grumpyPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,118,117,0.3); }
+  50% { box-shadow: 0 0 12px 4px rgba(255,118,117,0.2); }
+}
+
+.lingxi-card-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+}
+.lingxi-avatar {
+  width: 40px; height: 40px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px;
+  transition: transform 0.3s;
+}
+.lingxi-info h3 { font-size: 15px; font-weight: 600; }
+.lingxi-info p { font-size: 11px; color: var(--text-muted); }
+
+/* Live2D area */
+.lingxi-live2d {
+  width: 100%; height: 100px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 50px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: font-size 0.3s;
+}
+.lingxi-live2d:hover { font-size: 54px; }
+.lingxi-live2d-speech {
+  position: absolute; top: 6px; left: 6px; right: 6px;
+  background: rgba(255,255,255,0.95);
+  color: #333;
+  font-size: 11px;
+  padding: 5px 8px; border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.lingxi-live2d-speech.visible { opacity: 1; }
+.lingxi-live2d-status {
+  position: absolute; bottom: 5px; right: 8px;
+  font-size: 9px; color: var(--text-muted);
+  background: rgba(255,255,255,0.7);
+  padding: 1px 5px; border-radius: 4px;
+}
+
+/* Emotion display */
+.lingxi-emotion {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 10px;
+}
+.emotion-emoji { font-size: 28px; }
+.emotion-info { flex: 1; }
+.emotion-label { font-size: 12px; color: var(--text-secondary); }
+.emotion-bar-wrap {
+  background: rgba(255,255,255,0.08);
+  border-radius: 10px; height: 6px;
+  margin-top: 3px;
+  overflow: hidden;
+}
+.emotion-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--success), var(--accent));
+  border-radius: 10px;
+  transition: width 0.5s ease;
+}
+
+.grumpy-badge {
+  display: inline-block;
+  background: var(--danger);
+  color: white;
+  font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 10px;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Stats grid */
+.lingxi-stats {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;
+  margin-bottom: 10px;
+}
+.lingxi-stat {
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px; padding: 6px 8px;
+}
+.lingxi-stat .label {
+  font-size: 9px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.3px;
+  margin-bottom: 2px;
+}
+.lingxi-stat .value {
+  font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 4px;
+}
+.stat-bar {
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px; height: 3px;
+  margin-top: 3px; overflow: hidden;
+}
+.stat-bar-inner {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.stat-bar-inner.low { background: var(--danger); }
+.stat-bar-inner.med { background: var(--warning); }
+.stat-bar-inner.high { background: var(--success); }
+
+/* Interaction buttons */
+.lingxi-actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+}
+.interact-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-secondary);
+  padding: 6px 10px; border-radius: 8px;
+  font-size: 11px; cursor: pointer;
+  transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+}
+.interact-btn:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.interact-btn:active { transform: scale(0.96); }
+.interact-btn.praise:hover { background: var(--success); border-color: var(--success); }
+.interact-btn.ignore:hover { background: var(--danger); border-color: var(--danger); }
+
+/* Mood calendar mini */
+.mood-calendar-row {
+  display: flex; gap: 6px; overflow-x: auto;
+  padding: 4px 0;
+}
+.mood-day {
+  display: flex; flex-direction: column; align-items: center;
+  min-width: 32px;
+}
+.mood-day .emoji { font-size: 18px; }
+.mood-day .day { font-size: 9px; color: var(--text-muted); }
+
+/* ===== PANEL: TASKS ===== */
+.task-list { display: flex; flex-direction: column; gap: 8px; }
+.task-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 12px;
+  cursor: pointer; transition: all 0.2s;
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.task-item:hover { background: var(--bg-hover); border-color: var(--accent); }
+.task-item.done { opacity: 0.5; }
+.task-item.done .task-content { text-decoration: line-through; }
+
+.task-check {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  flex-shrink: 0; margin-top: 2px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: white;
+  transition: all 0.2s;
+}
+.task-item.done .task-check {
+  background: var(--success);
+  border-color: var(--success);
+}
+.task-content { flex: 1; min-width: 0; }
+.task-content h4 { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+.task-content p { font-size: 11px; color: var(--text-muted); }
+.task-meta {
+  display: flex; gap: 6px; margin-top: 4px;
+}
+.task-tag {
+  font-size: 10px; padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(74,144,226,0.15);
+  color: var(--secretary-color);
+}
+.task-deadline {
+  font-size: 10px; color: var(--text-muted);
+  display: flex; align-items: center; gap: 2px;
+}
+
+/* ===== PANEL: INSIGHTS ===== */
+.insight-card {
+  background: var(--bg-card);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-left: 3px solid var(--warning);
+  cursor: pointer; transition: all 0.2s;
+}
+.insight-card:hover { background: var(--bg-hover); }
+.insight-card.warning { border-left-color: var(--danger); background: rgba(255,118,117,0.05); }
+.insight-card.encouragement { border-left-color: var(--success); background: rgba(0,184,148,0.05); }
+.insight-card h4 { font-size: 13px; margin-bottom: 4px; }
+.insight-card p { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.insight-meta {
+  font-size: 10px; color: var(--text-muted);
+  margin-top: 6px;
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* Pattern items */
+.pattern-item {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-card);
+  border-radius: 8px; padding: 8px 10px;
+  margin-bottom: 6px;
+}
+.pattern-badge {
+  font-size: 10px; padding: 2px 6px;
+  border-radius: 4px; font-weight: 600;
+  flex-shrink: 0;
+}
+.pattern-badge.discovered { background: rgba(25,118,210,0.15); color: #1976d2; }
+.pattern-badge.confirmed { background: rgba(230,81,0,0.15); color: #e65100; }
+.pattern-badge.intervening { background: rgba(123,31,162,0.15); color: #7b1fa2; }
+.pattern-badge.broken { background: rgba(46,125,50,0.15); color: #2e7d32; }
+.pattern-item span:last-child { font-size: 12px; color: var(--text-secondary); }
+
+/* ===== PANEL: MY ===== */
+.profile-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  margin-bottom: 12px;
+}
+.profile-stat {
+  background: var(--bg-card);
+  border-radius: 8px; padding: 10px;
+}
+.profile-stat .label {
+  font-size: 10px; color: var(--text-muted);
+  text-transform: uppercase; margin-bottom: 4px;
+}
+.profile-stat .value { font-size: 18px; font-weight: 600; }
+
+.profile-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+.profile-tag {
+  font-size: 11px; padding: 3px 10px;
+  background: rgba(108,92,231,0.12);
+  color: var(--accent-light);
+  border-radius: 12px;
+}
+
+/* Memory layer display */
+.memory-layer {
+  background: var(--bg-card);
+  border-radius: 10px; padding: 10px;
+  margin-bottom: 10px;
+}
+.memory-layer h4 {
+  font-size: 11px; color: var(--text-muted);
+  text-transform: uppercase; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 4px;
+}
+.memory-item {
+  font-size: 12px; color: var(--text-secondary);
+  padding: 6px 0; border-bottom: 1px solid var(--border);
+}
+.memory-item:last-child { border-bottom: none; }
+.memory-item .layer-tag {
+  font-size: 9px; padding: 1px 4px;
+  border-radius: 3px; margin-right: 4px;
+  background: rgba(108,92,231,0.15);
+  color: var(--accent-light);
+}
+
+/* Timeline posts */
+.tl-post {
+  background: var(--bg-card);
+  border-radius: 10px; padding: 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+}
+.tl-author {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+}
+.tl-avatar {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: white;
+}
+.tl-name { font-size: 12px; font-weight: 600; }
+.tl-time { font-size: 10px; color: var(--text-muted); margin-left: auto; }
+.tl-content { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.tl-actions { display: flex; gap: 12px; margin-top: 6px; }
+.tl-action {
+  font-size: 11px; color: var(--text-muted);
+  cursor: pointer; display: flex; align-items: center; gap: 3px;
+  transition: color 0.2s;
+}
+.tl-action:hover { color: var(--accent); }
+.tl-reply-input {
+  display: flex; gap: 6px; margin-top: 6px;
+}
+.tl-reply-input input {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px; color: var(--text-primary);
+  outline: none;
+}
+.tl-reply-input input:focus { border-color: var(--accent); }
+.tl-reply-input button {
+  background: var(--accent);
+  border: none; border-radius: 8px;
+  padding: 5px 10px; font-size: 11px;
+  color: white; cursor: pointer;
+}
+
+/* ===== CHAT AREA ===== */
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.chat-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-tertiary) transparent;
+}
+.chat-container::-webkit-scrollbar { width: 6px; }
+.chat-container::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 3px; }
+
+/* Message bubbles */
+.message {
+  display: flex;
+  gap: 10px;
+  max-width: 72%;
+  animation: fadeIn 0.25s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.message.user { align-self: flex-end; flex-direction: row-reverse; }
+.message.bot { align-self: flex-start; }
+
+.message .avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; color: white;
+}
+.message.user .avatar { background: var(--accent); }
+.message.coach .avatar { background: var(--coach-color); }
+.message.secretary .avatar { background: var(--secretary-color); }
+.message.friend .avatar { background: var(--friend-color); }
+.message.analyst .avatar { background: var(--analyst-color); }
+
+.bubble {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  line-height: 1.65;
+  font-size: 14px;
+  color: var(--text-primary);
+  box-shadow: var(--shadow);
+  white-space: pre-wrap;
+  word-break: break-word;
+  position: relative;
+}
+.message.user .bubble {
+  background: linear-gradient(135deg, var(--accent), #9b59b6);
+  color: white;
+}
+.bubble .agent-tag {
+  display: inline-block;
+  font-size: 9px; font-weight: 600;
+  padding: 2px 6px; border-radius: 4px;
+  margin-bottom: 5px;
+}
+.bubble .agent-tag.coach { background: rgba(231,76,60,0.15); color: #e74c3c; }
+.bubble .agent-tag.secretary { background: rgba(74,144,226,0.15); color: #4A90E2; }
+.bubble .agent-tag.friend { background: rgba(155,89,182,0.15); color: #9b59b6; }
+.bubble .agent-tag.analyst { background: rgba(39,174,96,0.15); color: #27AE60; }
+
+.bubble .meta {
+  font-size: 10px; color: var(--text-muted);
+  margin-top: 4px; text-align: right;
+}
+
+/* System message */
+.message.system {
+  align-self: center; max-width: 90%;
+}
+.message.system .bubble {
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  box-shadow: none;
+  text-align: center;
+}
+.message.system .avatar { display: none; }
+
+/* Loading dots */
+.loading-msg {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--text-muted); font-size: 13px;
+  padding: 8px 0;
+}
+.loading-dots { display: flex; gap: 3px; }
+.loading-dots span {
+  width: 6px; height: 6px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  animation: bounce 1.2s infinite;
+}
+.loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-6px); }
+}
+
+/* Quick actions */
+.quick-actions {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+.quick-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px; padding: 5px 14px;
+  font-size: 12px; color: var(--text-secondary);
+  cursor: pointer; transition: all 0.2s;
+}
+.quick-btn:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* Input area */
+.input-area {
+  background: var(--bg-secondary);
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex; gap: 10px; align-items: flex-end;
+}
+.input-box {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 10px 16px;
+  font-size: 14px; color: var(--text-primary);
+  outline: none; resize: none;
+  max-height: 100px;
+  font-family: inherit; line-height: 1.5;
+  transition: border-color 0.2s;
+}
+.input-box:focus { border-color: var(--accent); }
+.input-box::placeholder { color: var(--text-muted); }
+
+.send-btn {
+  background: linear-gradient(135deg, var(--accent), #9b59b6);
+  color: white; border: none;
+  border-radius: 20px; padding: 10px 20px;
+  font-size: 14px; cursor: pointer; font-weight: 500;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.send-btn:hover { transform: scale(1.02); box-shadow: 0 2px 12px var(--accent-glow); }
+.send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.voice-btn {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.voice-btn:hover { background: var(--accent); color: white; }
+.voice-btn.recording {
+  background: var(--danger);
+  color: white;
+  animation: pulse 1s infinite;
+}
+
+/* Status bar */
+.status-bar {
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border);
+  padding: 5px 16px;
+  font-size: 10px; color: var(--text-muted);
+  display: flex; justify-content: space-between;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .sidebar.visible {
+    display: flex;
+    position: fixed; left: 0; top: 56px; bottom: 0;
+    z-index: 200; width: var(--sidebar-w);
+    box-shadow: 4px 0 16px rgba(0,0,0,0.3);
+  }
+  .message { max-width: 88%; }
+  .header-title h1 { font-size: 14px; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ===== HEADER ===== -->
+  <div class="header">
+    <div class="header-logo" id="headerLogo">
+      🤖
+      <div class="status-dot" id="statusDot"></div>
+    </div>
+    <div class="header-title">
+      <h1>灵犀·校园 <span>v1.0-alpha</span></h1>
+      <div class="header-subtitle" id="headerSubtitle">正在连接...</div>
+    </div>
+    <div class="header-actions">
+      <button class="header-btn" id="toggleSidebarBtn" onclick="toggleSidebar()">☰ 功能面板</button>
+    </div>
+  </div>
+
+  <!-- ===== MAIN ===== -->
+  <div class="main">
+
+    <!-- ========== SIDEBAR ========== -->
+    <div class="sidebar" id="sidebar">
+
+      <!-- Tab Bar -->
+      <div class="sidebar-tabs">
+        <button class="sidebar-tab active" data-tab="lingxi" onclick="switchTab('lingxi')">
+          🐱
+          <span>灵犀</span>
+        </button>
+        <button class="sidebar-tab" data-tab="tasks" onclick="switchTab('tasks')">
+          📋
+          <span>任务</span>
+        </button>
+        <button class="sidebar-tab" data-tab="insights" onclick="switchTab('insights')">
+          💡
+          <span>洞察</span>
+        </button>
+        <button class="sidebar-tab" data-tab="profile" onclick="switchTab('profile')">
+          👤
+          <span>我的</span>
+        </button>
+      </div>
+
+      <div class="sidebar-content">
+
+        <!-- ===== PANEL: LINGXI ===== -->
+        <div class="sidebar-panel active" id="panel-lingxi">
+
+          <!-- Lingxi Status Card -->
+          <div class="lingxi-card" id="lingxiCard">
+            <div class="lingxi-card-header">
+              <div class="lingxi-avatar" id="lingxiAvatar">🤖</div>
+              <div class="lingxi-info">
+                <h3>🐱 灵犀</h3>
+                <p id="lingxiState">初始化中...</p>
+              </div>
+            </div>
+
+            <!-- Live2D -->
+            <div class="lingxi-live2d" id="live2dContainer" onclick="onLive2DClick()">
+              <div id="live2dDisplay">🤖</div>
+              <div class="lingxi-live2d-speech" id="live2dSpeech"></div>
+              <div class="lingxi-live2d-status">● 形象就绪</div>
+            </div>
+
+            <!-- Emotion -->
+            <div class="lingxi-emotion">
+              <div class="emotion-emoji" id="emotionEmoji">😊</div>
+              <div class="emotion-info">
+                <div class="emotion-label" id="emotionLabel">心情：平静</div>
+                <div class="emotion-bar-wrap">
+                  <div class="emotion-bar" id="emotionBar" style="width:60%"></div>
+                </div>
+              </div>
+              <div id="grumpyBadge" class="grumpy-badge" style="display:none">闹脾气</div>
+            </div>
+
+            <!-- Stats -->
+            <div class="lingxi-stats">
+              <div class="lingxi-stat">
+                <div class="label">精力</div>
+                <div class="value">
+                  <span id="energyValue">85%</span>
+                </div>
+                <div class="stat-bar">
+                  <div class="stat-bar-inner" id="energyBar" style="width:85%"></div>
+                </div>
+              </div>
+              <div class="lingxi-stat">
+                <div class="label">好奇</div>
+                <div class="value">
+                  <span id="curiosityValue">60%</span>
+                </div>
+                <div class="stat-bar">
+                  <div class="stat-bar-inner" id="curiosityBar" style="width:60%"></div>
+                </div>
+              </div>
+              <div class="lingxi-stat">
+                <div class="label">社交</div>
+                <div class="value">
+                  <span id="socialValue">30%</span>
+                </div>
+                <div class="stat-bar">
+                  <div class="stat-bar-inner" id="socialBar" style="width:30%"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Interaction Buttons -->
+            <div class="lingxi-actions">
+              <button class="interact-btn praise" onclick="interactLingxi('praise')">👏 表扬</button>
+              <button class="interact-btn ignore" onclick="interactLingxi('ignore')">😤 忽略</button>
+              <button class="interact-btn" onclick="interactLingxi('apology')">🙏 道歉</button>
+              <button class="interact-btn" onclick="interactLingxi('task_done')">✅ 完成</button>
+            </div>
+          </div>
+
+          <!-- Mood Calendar Mini -->
+          <div style="margin-top:8px;">
+            <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px;">📅 近7日心情</div>
+            <div class="mood-calendar-row" id="moodCalendar"></div>
+          </div>
+        </div>
+
+        <!-- ===== PANEL: TASKS ===== -->
+        <div class="sidebar-panel" id="panel-tasks">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;">待办事项</div>
+            <span id="taskCount" style="font-size:10px;color:var(--accent);">0 项</span>
+          </div>
+          <div class="task-list" id="taskList">
+            <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:20px;">暂无待办</div>
+          </div>
+        </div>
+
+        <!-- ===== PANEL: INSIGHTS ===== -->
+        <div class="sidebar-panel" id="panel-insights">
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;">💡 灵犀洞察</div>
+          <div id="insightsList">
+            <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:20px;">暂无新洞察</div>
+          </div>
+
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin:14px 0 8px;">🔁 检测到的行为模式</div>
+          <div id="patternList">
+            <div style="font-size:12px;color:var(--text-muted);">暂无检测到模式</div>
+          </div>
+        </div>
+
+        <!-- ===== PANEL: PROFILE ===== -->
+        <div class="sidebar-panel" id="panel-profile">
+
+          <div class="profile-grid">
+            <div class="profile-stat">
+              <div class="label">压力等级</div>
+              <div class="value" id="stressLevel">5</div>
+            </div>
+            <div class="profile-stat">
+              <div class="label">活跃时段</div>
+              <div class="value" id="activeHours">-</div>
+            </div>
+          </div>
+
+          <div class="profile-tags" id="profileTags">
+            <span class="profile-tag" style="color:var(--text-muted);">加载中...</span>
+          </div>
+
+          <div class="memory-layer">
+            <h4>🧠 记忆层</h4>
+            <div id="memoryList">
+              <div style="font-size:12px;color:var(--text-muted);padding:8px 0;">暂无记忆</div>
+            </div>
+          </div>
+
+          <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px;">🌟 灵犀朋友圈</div>
+          <div id="timelineList">
+            <div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px;">加载中...</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ========== CHAT AREA ========== -->
+    <div class="chat-area">
+      <div class="chat-container" id="chatContainer"></div>
+
+      <div class="quick-actions">
+        <button class="quick-btn" onclick="sendQuick('今日简报')">📋 今日简报</button>
+        <button class="quick-btn" onclick="sendQuick('周报')">📊 周报</button>
+        <button class="quick-btn" onclick="sendQuick('我的待办')">📭 待办</button>
+        <button class="quick-btn" onclick="sendQuick('余额')">💰 余额</button>
+        <button class="quick-btn" onclick="sendQuick('我想聊聊')">💙 倾诉</button>
+        <button class="quick-btn" onclick="sendQuick('有什么发现吗')">🔍 探索</button>
+      </div>
+
+      <div class="input-area">
+        <button class="voice-btn" id="voiceBtn" onclick="toggleVoiceChat()" title="语音输入">🎤</button>
+        <textarea class="input-box" id="messageInput" placeholder="和灵犀说说话... (Enter发送, Shift+Enter换行)" rows="1"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">发送</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <span id="statusText">灵犀·校园 v1.0-alpha · 有灵魂的数字伙伴</span>
+    <span id="apiStatus">● 正在连接...</span>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const API_BASE = 'http://127.0.0.1:8000';
+let isLoading = false;
+let currentAgent = 'secretary';
+let lingxiStatus = {};
+let timelineFilter = 'all';
+let voiceRecording = false;
+let currentTab = 'lingxi';
+let mediaRecorder = null;
+let audioChunks = [];
+
+// DOM refs
+const chatContainer = document.getElementById('chatContainer');
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+
+const AGENT_EMOJI = { coach:'👊', secretary:'📋', friend:'💙', analyst:'📊' };
+const AGENT_NAMES = {
+  coach: '灵犀教练', secretary: '灵犀秘书',
+  friend: '灵犀树洞', analyst: '灵犀分析师',
+};
+const AGENT_COLORS = {
+  coach: '#E74C3C', secretary: '#4A90E2',
+  friend: '#9B59B6', analyst: '#27AE60',
+};
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('load', () => {
+  checkHealth();
+  loadAllData();
+  startLingxiPolling();
+});
+
+messageInput.addEventListener('input', () => {
+  messageInput.style.height = 'auto';
+  messageInput.style.height = Math.min(messageInput.scrollHeight, 100) + 'px';
+});
+messageInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.sidebar-tab[data-tab="${tab}"]`).classList.add('active');
+  document.querySelectorAll('.sidebar-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`panel-${tab}`).classList.add('active');
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('collapsed');
+  if (window.innerWidth <= 768) document.getElementById('sidebar').classList.toggle('visible');
+}
+
+// ============================================================
+// API
+// ============================================================
+async function checkHealth() {
+  try {
+    const res = await fetch(`${API_BASE}/health`);
+    if (res.ok) {
+      document.getElementById('apiStatus').textContent = '● 已连接 v1.0-alpha';
+      document.getElementById('apiStatus').style.color = 'var(--success)';
+      document.getElementById('headerSubtitle').textContent = '数字生命已就绪';
+    }
+  } catch {
+    document.getElementById('apiStatus').textContent = '● 后端未运行';
+    document.getElementById('headerSubtitle').textContent = '等待连接...';
+  }
+}
+
+async function loadAllData() {
+  await Promise.all([
+    loadLingxiStatus(),
+    loadInsights(),
+    loadPatterns(),
+    loadProfile(),
+    loadTasks(),
+    loadTimeline(),
+    loadMoodCalendar(),
+    loadMemories(),
+  ]);
+}
+
+// ============================================================
+// LINGXI STATUS
+// ============================================================
+async function loadLingxiStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/lingxi/status`);
+    if (!res.ok) return;
+    lingxiStatus = await res.json();
+
+    const life = lingxiStatus.life || {};
+    const emotion = lingxiStatus.emotion || {};
+
+    // Header subtitle
+    document.getElementById('headerSubtitle').textContent =
+      `精力${Math.round(life.energy||0)}% · ${life.mood_label||'平静'}`;
+
+    // Lingxi card header
+    document.getElementById('lingxiState').textContent = life.state || 'idle';
+    document.getElementById('lingxiAvatar').textContent = emotion.emoji || '🤖';
+
+    // Stats
+    const energy = Math.round(life.energy || 0);
+    const curiosity = Math.round(life.curiosity || 0);
+    const social = Math.round(life.social_need || 0);
+
+    document.getElementById('energyValue').textContent = energy + '%';
+    document.getElementById('curiosityValue').textContent = curiosity + '%';
+    document.getElementById('socialValue').textContent = social + '%';
+
+    // Stat bars
+    setStatBar('energyBar', energy);
+    setStatBar('curiosityBar', curiosity);
+    setStatBar('socialBar', social);
+
+    // Emotion
+    document.getElementById('emotionEmoji').textContent = emotion.emoji || '😊';
+    document.getElementById('emotionLabel').textContent = `心情：${emotion.label || '平静'}`;
+    const intensity = Math.round((emotion.intensity || 0.6) * 100);
+    document.getElementById('emotionBar').style.width = intensity + '%';
+
+    // Grumpy state
+    const card = document.getElementById('lingxiCard');
+    const dot = document.getElementById('statusDot');
+    const grumpyBadge = document.getElementById('grumpyBadge');
+
+    if (emotion.is_grumpy) {
+      card.classList.add('grumpy');
+      dot.classList.add('grumpy');
+      grumpyBadge.style.display = 'inline-block';
+    } else {
+      card.classList.remove('grumpy');
+      dot.classList.remove('grumpy');
+      grumpyBadge.style.display = 'none';
+    }
+
+    // Live2D sync
+    syncLive2D(emotion.emotion || emotion.current_emotion || 'joy');
+
+  } catch (e) { console.log('Lingxi status error:', e); }
+}
+
+function setStatBar(id, value) {
+  const bar = document.getElementById(id);
+  bar.style.width = value + '%';
+  bar.className = 'stat-bar-inner';
+  if (value < 30) bar.classList.add('low');
+  else if (value < 60) bar.classList.add('med');
+  else bar.classList.add('high');
+}
+
+function syncLive2D(emotion) {
+  const emojiMap = {
+    joy: '😊', sadness: '😢', anger: '😤', fear: '😨',
+    surprise: '😲', pride: '😎', jealousy: '😾', loneliness: '🥺',
+    embarrassment: '😳', love: '😍', neutral: '🤖',
+  };
+  const display = document.getElementById('live2dDisplay');
+  display.textContent = emojiMap[emotion] || emojiMap.neutral;
+  display.style.transition = 'all 0.3s';
+}
+
+function onLive2DClick() {
+  const speech = document.getElementById('live2dSpeech');
+  const greetings = ['嘿！', '有什么事吗？', '你好呀～', '要聊天吗？', '点我干嘛呀'];
+  speech.textContent = greetings[Math.floor(Math.random() * greetings.length)];
+  speech.classList.add('visible');
+  setTimeout(() => speech.classList.remove('visible'), 2500);
+}
+
+function startLingxiPolling() {
+  setInterval(loadLingxiStatus, 5000);
+}
+
+// ============================================================
+// INTERACTIONS
+// ============================================================
+async function interactLingxi(action) {
+  try {
+    const res = await fetch(`${API_BASE}/lingxi/interact?action=${action}`, {method:'POST'});
+    if (res.ok) {
+      const data = await res.json();
+      showToast(data.message || '灵犀收到了你的心意');
+      loadLingxiStatus();
+    }
+  } catch (e) { showToast('连接失败'); }
+}
+
+// ============================================================
+// TASKS
+// ============================================================
+async function loadTasks() {
+  try {
+    const res = await fetch(`${API_BASE}/tasks?status=pending&limit=20`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const tasks = data.tasks || [];
+    const el = document.getElementById('taskList');
+    document.getElementById('taskCount').textContent = `${tasks.length} 项`;
+
+    if (tasks.length === 0) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:20px;">太棒了！没有待办～</div>';
+      return;
+    }
+
+    el.innerHTML = tasks.map(t => `
+      <div class="task-item" onclick="completeTask(${t.id})">
+        <div class="task-check">${t.status === 'done' ? '✓' : ''}</div>
+        <div class="task-content">
+          <h4>${escapeHtml(t.content)}</h4>
+          ${t.deadline ? `<div class="task-meta"><span class="task-deadline">📅 ${formatDate(t.deadline)}</span></div>` : ''}
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+async function completeTask(id) {
+  try {
+    await fetch(`${API_BASE}/tasks/${id}/complete`, {method:'POST'});
+    loadTasks();
+    showToast('任务完成！🎉');
+  } catch (e) { showToast('操作失败'); }
+}
+
+// ============================================================
+// INSIGHTS
+// ============================================================
+async function loadInsights() {
+  try {
+    const res = await fetch(`${API_BASE}/insights?unread_only=true&limit=5`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const el = document.getElementById('insightsList');
+    const insights = data.insights || [];
+
+    if (insights.length === 0) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:20px;">暂无新洞察，灵犀在观察中 👀</div>';
+      return;
+    }
+
+    el.innerHTML = insights.map(i => `
+      <div class="insight-card ${i.type === 'pattern_warning' ? 'warning' : i.type === 'encouragement' ? 'encouragement' : ''}"
+           onclick="dismissInsight(${i.id})">
+        <h4>${escapeHtml(i.title)}</h4>
+        <p>${escapeHtml((i.content||'').substring(0,80))}${i.content&&i.content.length>80?'...':''}</p>
+        <div class="insight-meta">
+          <span>${i.severity>=4?'⚠️ 重要':'ℹ️ 轻微'}</span>
+          <span>${formatRelativeTime(i.created_at)}</span>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+function dismissInsight(id) {
+  fetch(`${API_BASE}/insights/${id}/read`, {method:'POST'})
+    .then(() => loadInsights());
+}
+
+// ============================================================
+// PATTERNS
+// ============================================================
+async function loadPatterns() {
+  try {
+    const res = await fetch(`${API_BASE}/patterns`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const el = document.getElementById('patternList');
+    const patterns = data.patterns || [];
+
+    if (patterns.length === 0) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">暂无检测到模式，继续保持！</div>';
+      return;
+    }
+
+    el.innerHTML = patterns.slice(0, 5).map(p => `
+      <div class="pattern-item">
+        <span class="pattern-badge ${p.lifecycle_stage||'discovered'}">${p.lifecycle_stage||'discovered'}</span>
+        <span>${escapeHtml((p.description||'').substring(0,30))}</span>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+// ============================================================
+// PROFILE
+// ============================================================
+async function loadProfile() {
+  try {
+    const res = await fetch(`${API_BASE}/profile`);
+    if (!res.ok) return;
+    const p = await res.json();
+    document.getElementById('stressLevel').textContent = p.stress_level || 5;
+    const hours = p.active_hours || [];
+    document.getElementById('activeHours').textContent = hours.length > 0 ? `${hours.length}h` : '-';
+    renderProfileTags(p.known_patterns||[], p.current_goals||[]);
+  } catch (e) {}
+}
+
+function renderProfileTags(patterns, goals) {
+  const el = document.getElementById('profileTags');
+  const all = [...patterns, ...goals].slice(0, 8);
+  if (all.length === 0) { el.innerHTML = '<span class="profile-tag" style="color:var(--text-muted);">正在学习...</span>'; return; }
+  el.innerHTML = all.map(t => `<span class="profile-tag">${escapeHtml(t)}</span>`).join('');
+}
+
+// ============================================================
+// MEMORIES
+// ============================================================
+async function loadMemories() {
+  try {
+    const res = await fetch(`${API_BASE}/memories?limit=5`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const el = document.getElementById('memoryList');
+    const memories = data.memories || [];
+
+    if (memories.length === 0) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0;">暂无记忆</div>';
+      return;
+    }
+
+    el.innerHTML = memories.map(m => `
+      <div class="memory-item">
+        <span class="layer-tag">${m.layer||'obs'}</span>
+        ${escapeHtml((m.content||'').substring(0,50))}
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+// ============================================================
+// SOCIAL / TIMELINE
+// ============================================================
+async function loadTimeline() {
+  try {
+    const res = await fetch(`${API_BASE}/social/timeline?limit=10`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const el = document.getElementById('timelineList');
+    const posts = data.posts || [];
+
+    if (posts.length === 0) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px;">灵犀还没发动态...</div>';
+      return;
+    }
+
+    el.innerHTML = posts.slice(0, 5).map(p => `
+      <div class="tl-post">
+        <div class="tl-author">
+          <div class="tl-avatar">${(p.author_name||'?')[0]}</div>
+          <div class="tl-name">${escapeHtml(p.author_name||p.author_id||'?')}</div>
+          <div class="tl-time">${formatRelativeTime(p.created_at)}</div>
+        </div>
+        <div class="tl-content">${escapeHtml(p.content)}</div>
+        <div class="tl-actions">
+          <span class="tl-action" onclick="likePost('${p.id}')">❤️ ${p.likes||0}</span>
+          <span class="tl-action">💬 ${(p.replies||[]).length}</span>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+function likePost(postId) {
+  fetch(`${API_BASE}/social/timeline/${postId}/like`, {method:'POST'})
+    .then(() => loadTimeline());
+}
+
+// ============================================================
+// MOOD CALENDAR
+// ============================================================
+async function loadMoodCalendar() {
+  try {
+    const res = await fetch(`${API_BASE}/social/mood-calendar?days=7`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const el = document.getElementById('moodCalendar');
+    const calendar = data.calendar || [];
+
+    if (calendar.length === 0) {
+      el.innerHTML = '<div style="font-size:11px;color:var(--text-muted);">暂无数据</div>';
+      return;
+    }
+
+    el.innerHTML = calendar.map(d => `
+      <div class="mood-day">
+        <div class="emoji">${d.emoji||'😐'}</div>
+        <div class="day">${formatDay(d.date)}</div>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+// ============================================================
+// VOICE
+// ============================================================
+async function toggleVoiceChat() {
+  const btn = document.getElementById('voiceBtn');
+
+  if (!voiceRecording) {
+    // Start recording
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        stream.getTracks().forEach(t => t.stop());
+        await playTTS(blob);
+      };
+
+      mediaRecorder.start();
+      btn.classList.add('recording');
+      btn.textContent = '⏹';
+      voiceRecording = true;
+      showToast('录音中...说完后点停止');
+
+      // Auto-stop after 10s
+      setTimeout(() => { if (voiceRecording) toggleVoiceChat(); }, 10000);
+    } catch (e) {
+      showToast('无法访问麦克风');
+    }
+  } else {
+    // Stop recording
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    btn.classList.remove('recording');
+    btn.textContent = '🎤';
+    voiceRecording = false;
+  }
+}
+
+async function playTTS(audioBlob) {
+  showToast('语音功能开发中...');
+  // TTS playback would go here when backend is ready
+}
+
+// ============================================================
+// CHAT
+// ============================================================
+function updateActiveAgent(agent) {
+  currentAgent = agent;
+}
+
+function addMessage(text, isUser = false, agent = 'secretary') {
+  const msg = document.createElement('div');
+  msg.className = `message ${isUser ? 'user' : 'bot'} ${!isUser ? agent : ''}`;
+  const emoji = isUser ? '😊' : AGENT_EMOJI[agent]||'🤖';
+  const agentTag = (!isUser && agent !== 'secretary') ?
+    `<span class="agent-tag ${agent}">${AGENT_NAMES[agent]||agent}</span>` : '';
+
+  msg.innerHTML = `
+    <div class="avatar">${emoji}</div>
+    <div class="bubble">${agentTag}${escapeHtml(text)}</div>
+  `;
+  chatContainer.appendChild(msg);
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function addLoading() {
+  const loading = document.createElement('div');
+  loading.className = `message bot ${currentAgent}`;
+  loading.id = 'loadingMsg';
+  loading.innerHTML = `
+    <div class="avatar">${AGENT_EMOJI[currentAgent]||'🤖'}</div>
+    <div class="bubble">
+      <div class="loading-msg">
+        <div class="loading-dots"><span></span><span></span><span></span></div>
+        ${AGENT_NAMES[currentAgent]||'灵犀'}正在思考...
+      </div>
+    </div>`;
+  chatContainer.appendChild(loading);
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function removeLoading() {
+  const l = document.getElementById('loadingMsg');
+  if (l) l.remove();
+}
+
+async function sendMessage() {
+  const text = messageInput.value.trim();
+  if (!text || isLoading) return;
+
+  addMessage(text, true);
+  messageInput.value = '';
+  messageInput.style.height = 'auto';
+
+  isLoading = true; sendBtn.disabled = true;
+  addLoading();
+
+  try {
+    const res = await fetch(`${API_BASE}/chat`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({message: text, user_id: 'default'}),
+    });
+    removeLoading();
+
+    if (res.ok) {
+      const data = await res.json();
+      const agent = data.agent || 'secretary';
+      updateActiveAgent(agent);
+
+      // Typewriter effect for AI message
+      const replyText = data.reply || '收到';
+      await typewriterAdd(replyText, false, agent);
+
+      // Update status
+      if (data.lingxi_status) {
+        lingxiStatus = data.lingxi_status;
+        loadLingxiStatus();
+      }
+
+      loadAllData();
+    } else {
+      addMessage('抱歉，服务出了点问题。', false);
+    }
+  } catch (e) {
+    removeLoading();
+    addMessage('无法连接到后端，请确保后端服务已启动。', false);
+  }
+
+  isLoading = false; sendBtn.disabled = false;
+}
+
+async function typewriterAdd(text, isUser, agent) {
+  const msg = document.createElement('div');
+  msg.className = `message ${isUser ? 'user' : 'bot'} ${!isUser ? agent : ''}`;
+  const emoji = isUser ? '😊' : AGENT_EMOJI[agent]||'🤖';
+  const agentTag = (!isUser && agent !== 'secretary') ?
+    `<span class="agent-tag ${agent}">${AGENT_NAMES[agent]||agent}</span>` : '';
+
+  msg.innerHTML = `
+    <div class="avatar">${emoji}</div>
+    <div class="bubble">${agentTag}<span id="typewriterTarget"></span></div>
+  `;
+  chatContainer.appendChild(msg);
+
+  const target = msg.querySelector('#typewriterTarget');
+  for (let i = 0; i < text.length; i++) {
+    target.textContent += text[i];
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    if (i % 3 === 0) await sleep(15);
+  }
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function sendQuick(text) {
+  messageInput.value = text;
+  await sendMessage();
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+function formatRelativeTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = (now - d) / 1000;
+  if (diff < 60) return '刚刚';
+  if (diff < 3600) return `${Math.floor(diff/60)}m前`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h前`;
+  return `${Math.floor(diff/86400)}d前`;
+}
+
+function formatDay(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const days = ['日','一','二','三','四','五','六'];
+  return `周${days[d.getDay()]}`;
+}
+
+function showToast(msg) {
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position:fixed;bottom:70px;left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,0.85);color:white;padding:8px 18px;
+    border-radius:20px;font-size:13px;z-index:9999;
+    animation:fadeIn 0.3s ease;
+  `;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity='0'; setTimeout(()=>toast.remove(), 300); }, 2500);
+}
+
+// ============================================================
+// WELCOME MESSAGE
+// ============================================================
+setTimeout(() => {
+  addMessage(`🤖 嗨！我是灵犀·校园 v1.0-alpha，有灵魂的数字伙伴。
+
+🌟 我能做的：
+• 随手记：任务/时间/日记/记账——随便说就行
+• 主动洞察：发现你的拖延模式和情绪规律
+• 情绪陪伴：你累了我陪你聊聊
+• 行为教练：敢直接指出你在逃避
+
+试试说吧，比如：
+"下周交电动力学实验报告" / "刚上了2小时家教" / "今天好累..."`, false, 'secretary');
+}, 800);
+</script>
+</body>
+</html>
