@@ -3,6 +3,12 @@ apply plugin: 'com.android.application'
 android {
     namespace "com.lingxi.campus"
     compileSdk rootProject.ext.compileSdkVersion
+
+    // Fix Kotlin stdlib duplicate class conflict
+    configurations.all {
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+    }
     defaultConfig {
         applicationId "com.lingxi.campus"
         minSdkVersion rootProject.ext.minSdkVersion
