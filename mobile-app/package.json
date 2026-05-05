@@ -1,0 +1,17 @@
+{
+  "name": "mobile-app",
+  "version": "1.0.0",
+  "description": "灵犀·校园 Android 客户端",
+  "scripts": {
+    "copy": "npx cap copy android",
+    "sync": "npx cap sync android",
+    "build:web": "echo 'No build step for vanilla HTML'",
+    "build:android": "cd android && npx cap copy android && ./gradlew assembleDebug",
+    "open:android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/cli": "^7.6.2",
+    "@capacitor/core": "^8.3.1"
+  }
+}
