@@ -73,3 +73,6 @@ htmlcov/
 *.temp
 *.bak
 *~
+
+# Electron 构建输出
+electron-app/dist*/
